@@ -1,5 +1,5 @@
 create table public.services (
-  id               uuid primary key default uuid_generate_v4(),
+  id               uuid primary key default gen_random_uuid(),
   shop_id          uuid references public.shops(id) on delete cascade not null,
   name             text not null,
   description      text,

@@ -1,7 +1,5 @@
-create extension if not exists "uuid-ossp";
-
 create table public.shops (
-  id                  uuid primary key default uuid_generate_v4(),
+  id                  uuid primary key default gen_random_uuid(),
   owner_id            uuid references auth.users(id) on delete cascade not null,
   name                text not null,
   slug                text unique not null,

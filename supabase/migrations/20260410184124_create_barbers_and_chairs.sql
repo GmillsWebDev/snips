@@ -1,5 +1,5 @@
 create table public.barbers (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   shop_id     uuid references public.shops(id) on delete cascade not null,
   user_id     uuid references auth.users(id) on delete set null,
   name        text not null,
@@ -12,7 +12,7 @@ create table public.barbers (
 create index on public.barbers (shop_id);
 
 create table public.chairs (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   shop_id     uuid references public.shops(id) on delete cascade not null,
   barber_id   uuid references public.barbers(id) on delete set null,
   label       text not null,

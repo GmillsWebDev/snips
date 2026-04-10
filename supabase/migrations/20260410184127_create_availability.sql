@@ -1,5 +1,5 @@
 create table public.availability_rules (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   barber_id    uuid references public.barbers(id) on delete cascade not null,
   day_of_week  int not null check (day_of_week between 0 and 6),
   start_time   time not null,
@@ -10,7 +10,7 @@ create table public.availability_rules (
 create index on public.availability_rules (barber_id);
 
 create table public.blocked_slots (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   barber_id   uuid references public.barbers(id) on delete cascade not null,
   start_at    timestamptz not null,
   end_at      timestamptz not null,

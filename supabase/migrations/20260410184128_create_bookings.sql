@@ -1,5 +1,5 @@
 create table public.bookings (
-  id                  uuid primary key default uuid_generate_v4(),
+  id                  uuid primary key default gen_random_uuid(),
   shop_id             uuid references public.shops(id) on delete cascade not null,
   customer_id         uuid references public.customers(id) on delete restrict not null,
   barber_id           uuid references public.barbers(id) on delete restrict not null,

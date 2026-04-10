@@ -1,6 +1,6 @@
 -- Waitlist
 create table public.waitlist (
-  id             uuid primary key default uuid_generate_v4(),
+  id             uuid primary key default gen_random_uuid(),
   shop_id        uuid references public.shops(id) on delete cascade not null,
   customer_id    uuid references public.customers(id) on delete cascade not null,
   service_id     uuid references public.services(id) on delete cascade not null,
@@ -14,7 +14,7 @@ create index on public.waitlist (shop_id);
 
 -- Reviews
 create table public.reviews (
-  id           uuid primary key default uuid_generate_v4(),
+  id           uuid primary key default gen_random_uuid(),
   booking_id   uuid references public.bookings(id) on delete cascade not null unique,
   customer_id  uuid references public.customers(id) on delete cascade not null,
   rating       int not null check (rating between 1 and 5),
@@ -27,7 +27,7 @@ create index on public.reviews (booking_id);
 
 -- Notification log
 create table public.notification_log (
-  id               uuid primary key default uuid_generate_v4(),
+  id               uuid primary key default gen_random_uuid(),
   booking_id       uuid references public.bookings(id) on delete cascade not null,
   type             text not null check (type in ('confirmation','reminder','accepted','rejected','cancelled','waitlist','review_invite')),
   channel          text not null check (channel in ('email','sms','whatsapp')),
@@ -40,7 +40,7 @@ create index on public.notification_log (booking_id);
 
 -- Discount codes
 create table public.discount_codes (
-  id          uuid primary key default uuid_generate_v4(),
+  id          uuid primary key default gen_random_uuid(),
   shop_id     uuid references public.shops(id) on delete cascade not null,
   code        text not null unique,
   type        text not null check (type in ('percent','fixed_pence')),
@@ -56,7 +56,7 @@ create index on public.discount_codes (code);
 
 -- User roles
 create table public.user_roles (
-  id       uuid primary key default uuid_generate_v4(),
+  id       uuid primary key default gen_random_uuid(),
   user_id  uuid references auth.users(id) on delete cascade not null,
   shop_id  uuid references public.shops(id) on delete cascade not null,
   role     text not null check (role in ('owner','barber','receptionist')),
