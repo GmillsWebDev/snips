@@ -4,10 +4,10 @@
 :root {
   /* Brand */
   --color-primary: #0b0b92;
-  --color-primary-hover: #3434af;
+  --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
   --color-on-primary: #ffffff;
   --color-secondary: #26b6bb;
-  --color-secondary-hover: #34b6bb;
+  --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 75%, black);;
   --color-on-secondary: #000000;
 
   --color-accent: #26b6bb;
