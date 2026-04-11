@@ -38,7 +38,6 @@
 </button>
 
 <style>
-  /* Style me! */
   .btn {
     padding: var(--space-1) var(--space-4);
     display: inline-flex;
@@ -57,21 +56,36 @@
     border-radius: var(--radius-full);
   }
   .btn--primary {
-        background-color: var(--color-primary);
-        color: var(--color-on-primary);
-        border: 1px solid var(--color-primary);
-   }
+    background-color: var(--color-primary);
+    color: var(--color-on-primary);
+    border: 1px solid var(--color-primary);
+    transition: background 0.15s, color 0.15s, border 0.15s;
+  }
+  .btn--primary:hover:not(:disabled) {
+    background-color: var(--color-primary-hover, #0053a0);
+    border-color: var(--color-primary-hover, #0053a0);
+    color: var(--color-on-primary, #fff);
+  }
   .btn--secondary {
-        background-color: var(--color-secondary);
-        color: var(--color-on-secondary);
-        border: 1px solid var(--color-secondary);
-   }
-  .btn--disabled {
-        background-color: var(--color-grey);
-        color: var(--color-dark-grey);
-        border: 1px solid var(--color-grey);
-        cursor: not-allowed;
-   }
+    background-color: var(--color-secondary);
+    color: var(--color-on-secondary);
+    border: 1px solid var(--color-secondary);
+    transition: background 0.15s, color 0.15s, border 0.15s;
+  }
+  .btn--secondary:hover:not(:disabled) {
+    background-color: var(--color-secondary-hover, #e0e0e0);
+    border-color: var(--color-secondary-hover, #e0e0e0);
+    color: var(--color-on-secondary, #222);
+  }
+  .btn--disabled,
+  .btn:disabled {
+    background-color: var(--color-grey);
+    color: var(--color-dark-grey);
+    border: 1px solid var(--color-grey);
+    cursor: not-allowed;
+    opacity: 0.7;
+    pointer-events: none;
+  }
   .btn--sm {
         padding: var(--space-1) var(--space-2);
         font-size: var(--font-size-sm);

@@ -30,6 +30,8 @@
   --color-text-subtle: #a1a1aa;
 
   /* Status colours */
+  --color-warning: #f0d878;
+  --color-error: #cc2d2d;
   --color-pending-bg: #fefce8;
   --color-pending-text: #854d0e;
   --color-accepted-bg: #f0fdf4;

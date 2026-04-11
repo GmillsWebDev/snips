@@ -44,10 +44,19 @@
 </div>
 
 <style>
-  /* Style me! */
-  .field { }
-  .field__label { }
-  .field__input { }
-  .field__input--error { }
-  .field__error { }
+  .field {
+    margin: var(--space-4) var(--space-2) var(--space-4) 0;
+   }
+  .field__label {
+    margin-right: var(--space-2);
+   }
+  .field__input {
+    padding: var(--space-1) var(--space-2);
+   }
+  .field__input--error {
+    border: 2px solid var(--color-error)
+   }
+  .field__error {
+    color: var(--color-error);
+   }
 </style>

@@ -1,7 +1,7 @@
 <script>
-    import Button from '$lib/components/ui/Button.svelte'
+    import Input from "$lib/components/ui/Input.svelte";
 </script>
 
 <h1>Welcome</h1>
 <p>public page</p>
-<Button>my button</Button>
+<Input label="Email" name="email" type="email" placeholder="placeholder" required />        
