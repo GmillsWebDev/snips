@@ -3,6 +3,7 @@
   import { onMount } from 'svelte'
   import { createSupabaseBrowserClient } from '$lib/supabase'
   import type { LayoutData } from './$types'
+  import '../app.css'
 
   let { data, children }: { data: LayoutData, children: any } = $props()
 
