@@ -1,11 +1,10 @@
 <script>
-    import Input from "$lib/components/ui/Input.svelte";
-    import Button from "$lib/components/ui/Button.svelte";
+    import Modal from "$lib/components/ui/Modal.svelte";
 </script>
 
 <h1>Welcome</h1>
 <p>public page</p>
-<Input label="Email" name="email" type="email" placeholder="placeholder" required />        
-<Button variant="primary" size="md">
-    Submit
-</Button>
+<Modal title="Hello" open={true} onclose={() => console.log('Modal closed')}>
+  <p>This is a modal dialog.</p>
+<p> another para</p>
+</Modal>
