@@ -29,7 +29,6 @@
 {/if}
 
 <style>
-  /* Style me! */
 .modal-overlay {
     position: fixed;
     inset: 0;

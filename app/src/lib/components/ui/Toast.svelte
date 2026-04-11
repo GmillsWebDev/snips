@@ -19,7 +19,6 @@
 {/if}
 
 <style>
-  /* Style me! */
   .toast {
     min-width: 220px;
     max-width: 400px;
