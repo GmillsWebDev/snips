@@ -84,5 +84,20 @@
         padding: var(--space-2) var(--space-6);
         font-size: var(--font-size-lg);
    }
-  .btn__spinner { }
+  .btn__spinner {
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-top: 2px solid var(--color-on-primary, #fff);
+    border-radius: 50%;
+    display: inline-block;
+    animation: btn-spinner-spin 0.7s linear infinite;
+    margin-right: 0.5em;
+    vertical-align: middle;
+  }
+
+  @keyframes btn-spinner-spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
 </style>
