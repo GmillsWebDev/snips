@@ -1,11 +1,22 @@
 <script lang="ts">
-	import favicon from '$lib/assets/favicon.svg';
+  import { invalidate } from '$app/navigation'
+  import { onMount } from 'svelte'
+  import { createSupabaseBrowserClient } from '$lib/supabase'
+  import type { LayoutData } from './$types'
 
-	let { children } = $props();
+  let { data, children }: { data: LayoutData, children: any } = $props()
+
+  const supabase = createSupabaseBrowserClient()
+
+  onMount(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.expires_at !== data.session?.expires_at) {
+        invalidate('supabase:auth')
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  })
 </script>
-
-<svelte:head>
-	<link rel="icon" href={favicon} />
-</svelte:head>
 
 {@render children()}
