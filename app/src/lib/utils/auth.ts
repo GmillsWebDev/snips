@@ -16,21 +16,23 @@ export const signIn = async (email: string, password: string) => {
 }
 
 /**
- * Register a new user with email, password, and name.
- * The name is stored in the user's metadata.
+ * Register a new user with email, password, first name, and last name.
+ * The first and last name are stored in the user's metadata.
  * Throws an error if registration fails.
  */
-export const signUp = async (email: string, password: string, name: string) => {
-  // Attempt to sign up and attach name to user metadata
+export const signUp = async (email: string, password: string, first_name: string, last_name: string) => {
+  // Attempt to sign up the user with provided credentials and metadata
   const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
+    email, // User's email address
+    password, // User's password
     options: {
-      data: { name } // Store name in user profile
+      data: { first_name, last_name } // Store first and last name in user profile metadata
     }
   })
-  if (error) throw error // Propagate error to caller
-  return data // Return user/session data
+  // If there was an error during sign up, throw it to be handled by the caller
+  if (error) throw error
+  // Return the user/session data on successful registration
+  return data
 }
 
 /**
