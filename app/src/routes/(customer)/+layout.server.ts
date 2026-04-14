@@ -1,17 +1,20 @@
+
+// Import the redirect helper from SvelteKit for navigation
 import { redirect } from '@sveltejs/kit'
+// Import the type for the layout server load function
 import type { LayoutServerLoad } from './$types'
 
 // The load function runs on every request to this layout route.
 // It ensures that only authenticated users can access customer routes.
-export const load: LayoutServerLoad = async ({ locals }) => {
-  // Retrieve the current user and session from locals
+export const load: LayoutServerLoad = async ({ locals, url }) => {
+  // Retrieve the user and session from the session helper
   const { user, session } = await locals.safeGetSession()
 
-  // If there is no authenticated user, redirect to the login page
+  // If the user is not logged in, redirect to login page with redirect back to original page after login
   if (!user) {
-    redirect(303, '/login')
+    redirect(303, `/login?redirectTo=${url.pathname}`)
   }
 
-  // Provide user and session data to the layout and its children
+  // Return user and session to the layout
   return { user, session }
 }
