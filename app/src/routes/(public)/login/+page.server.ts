@@ -26,6 +26,6 @@ export const actions: Actions = {
       return fail(401, { error: 'Invalid email or password' })
     }
 
-    redirect(303, '/dashboard')
+    return redirect(303, '/dashboard')
   }
 }

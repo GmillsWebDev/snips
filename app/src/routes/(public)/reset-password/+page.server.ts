@@ -34,6 +34,6 @@ export const actions: Actions = {
     }
 
     // Redirect to dashboard on successful password reset
-    redirect(303, '/dashboard')
+    return redirect(303, '/dashboard')
   }
 }

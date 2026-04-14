@@ -52,6 +52,6 @@ export const actions: Actions = {
     }
 
     // Registration successful, redirect to confirmation page
-    redirect(303, '/register/confirm')
+    return redirect(303, '/register/confirm')
   }
 }
