@@ -1,28 +1,31 @@
-import { redirect, error } from '@sveltejs/kit'
-import type { LayoutServerLoad } from './$types'
 
-// The load function runs on every request to this admin layout route.
-// It ensures that only authenticated users with a role in at least one shop can access admin pages.
+// Import SvelteKit helpers for navigation and error handling
+import { redirect, error } from '@sveltejs/kit'
+// Import the type for the layout server load function
+import type { LayoutServerLoad } from './$types'
+// Import the getRole helper to fetch user roles
+import { getRole } from '$lib/server/getRole'
+
+
+// The load function runs on every request to this layout route.
+// It ensures that only authenticated users with a valid role can access admin routes.
 export const load: LayoutServerLoad = async ({ locals }) => {
-  // Retrieve the current user and session from locals
+  // Retrieve the user and session from the session helper
   const { user, session } = await locals.safeGetSession()
 
-  // If there is no authenticated user, redirect to the login page
+  // If the user is not logged in, redirect to login page
   if (!user) {
     redirect(303, '/login')
   }
 
-  // Query the database to check if the user has any roles in shops
-  const { data: roles } = await locals.supabase
-    .from('user_roles')
-    .select('role, shop_id')
-    .eq('user_id', user.id)
+  // Fetch the user's role for admin access
+  const role = await getRole(locals.supabase, user.id)
 
-  // If the user has no roles, deny access to the admin area
-  if (!roles || roles.length === 0) {
+  // If the user does not have a valid role, deny access
+  if (!role) {
     error(403, 'You do not have access to this area')
   }
 
-  // Provide user, session, and roles data to the layout and its children
-  return { user, session, roles }
+  // Return user, session, and role to the layout
+  return { user, session, role }
 }
