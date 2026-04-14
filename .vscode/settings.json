@@ -20,5 +20,7 @@
   ],
   "[typescript]": {
     "editor.defaultFormatter": "denoland.vscode-deno"
-  }
+  },
+  "snyk.advanced.organization": "c8f227bf-1f8d-49b9-8983-f3dbf4fc7c1e",
+  "snyk.advanced.autoSelectOrganization": true
 }

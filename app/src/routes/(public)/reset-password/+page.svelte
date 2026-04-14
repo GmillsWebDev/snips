@@ -8,20 +8,18 @@
 </script>
 
 <svelte:head>
-  <title>Login — Snips</title>
+  <title>Set New Password — Snips</title>
 </svelte:head>
 
 <div class="auth-page container">
   <div class="auth-card">
     <div class="auth-card__header">
-      <h1>Welcome back</h1>
-      <p>Sign in to your account</p>
+      <h1>Set new password</h1>
+      <p>Choose a strong password for your account.</p>
     </div>
 
     {#if form?.error}
-      <div class="auth-card__error">
-        {form.error}
-      </div>
+      <div class="auth-card__error">{form.error}</div>
     {/if}
 
     <form
@@ -36,33 +34,25 @@
       class="auth-card__form"
     >
       <Input
-        name="email"
-        label="Email"
-        type="email"
+        name="password"
+        label="New password"
+        type="password"
         required
-        placeholder="you@example.com"
+        placeholder="Min. 10 characters"
       />
 
       <Input
-        name="password"
-        label="Password"
+        name="confirm"
+        label="Confirm new password"
         type="password"
         required
         placeholder="••••••••"
       />
 
-      <a href="/forgot-password" class="auth-card__forgot">
-        Forgot your password?
-      </a>
-
       <Button type="submit" {loading}>
-        Sign in
+        Update password
       </Button>
     </form>
-
-    <p class="auth-card__footer">
-      Don't have an account? <a href="/register">Create one</a>
-    </p>
   </div>
 </div>
 
@@ -70,10 +60,5 @@
   .auth-page {
     display: flex;
     justify-content: center;
-    min-height: 100vh;
-  }
-  .auth-card__forgot {
-    display: block;
-    font-size: 0.75rem;
    }
 </style>

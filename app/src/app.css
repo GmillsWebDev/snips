@@ -119,9 +119,25 @@ input, textarea, select {
 
 a {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
+  &:hover {
+    text-decoration: none;
+  }
 }
 
 h1 { font-size: var(--font-size-3xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
 h2 { font-size: var(--font-size-2xl); font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
 h3 { font-size: var(--font-size-xl);  font-weight: 600; line-height: 1.4; }
+
+/* Global Styles */
+
+.container{
+	max-width: 1600px;
+	width: calc(100% - 4rem);
+	margin: 4rem auto;
+}
+
+.container-full{
+	max-width: 100%;
+	width: 100%;
+}

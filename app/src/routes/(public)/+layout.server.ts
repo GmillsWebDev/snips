@@ -11,7 +11,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
   const { user } = await locals.safeGetSession()
 
   // Define routes that should not be accessible to logged-in users
-  const authRoutes = ['/login', '/register']
+  const authRoutes = ['/login', '/register', '/forgot-password', '/reset-password']
 
   // If a user is logged in and tries to access an auth route, redirect to dashboard
   if (user && authRoutes.includes(url.pathname)) {
