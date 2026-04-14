@@ -1,4 +1,4 @@
-# AGENTS.md — Snips Project Conventions
+# CLAUDE.md — Snips Project Conventions
 
 This file instructs AI agents and coding assistants on the conventions, patterns and structure used in this project. Always follow these rules when generating or editing code.
 
@@ -300,3 +300,12 @@ Use Supabase's generated types where available. When querying with `.select()`, 
 - ❌ Do not skip error handling on Supabase queries
 - ❌ Do not do auth checks in `.svelte` files — use server load functions
 - ❌ Do not import `$lib/server/*` in browser/component files
+
+---
+
+## Reference Docs
+
+These files contain the full project plan and build checklist — read them when you need broader context on architecture, the DB schema, the booking state machine, or what phase of the build we're in:
+
+- [`barbershop-booking-app-plan.md`](./barbershop-booking-app-plan.md) — full technical plan (architecture, DB schema, routes, edge functions, RLS strategy, feature list)
+- [`barbershop-build-steps.md`](./barbershop-build-steps.md) — phased build checklist (companion to the plan above)
