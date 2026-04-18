@@ -85,6 +85,13 @@ begin
   on conflict do nothing;
 
   -- -------------------------
+  -- Client branding
+  -- -------------------------
+  insert into public.client_branding (shop_id, color_primary, color_secondary, font_heading, font_body)
+  values (v_shop_id, '#ff0000', '#1f921f', 'Inter', 'Inter')
+  on conflict (shop_id) do nothing;
+
+  -- -------------------------
   -- User role — owner
   -- -------------------------
   insert into public.user_roles (user_id, shop_id, role)

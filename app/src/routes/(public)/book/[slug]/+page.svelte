@@ -10,7 +10,7 @@
 </svelte:head>
 
 <div class="booking-page">
-  <header class="booking-page__header" style="--shop-brand: {shop.brand_colour ?? 'var(--color-primary)'}">
+  <header class="booking-page__header" style="--shop-brand: {data.branding.color_secondary ?? 'var(--color-primary)'}">
     <div class="booking-page__header-inner container">
       {#if shop.logo_url}
         <img src={shop.logo_url} alt="{shop.name} logo" class="booking-page__logo" />

@@ -1,0 +1,15 @@
+/* ===========================
+   Client Branding
+   These variables are overridden at runtime by the root layout,
+   which fetches the shop's client_branding row server-side and
+   applies the values as inline CSS custom properties on <html>.
+   The defaults here are fallbacks only — used when no shop
+   branding is available (e.g. unauthenticated, no slug in URL).
+=========================== */
+
+:root {
+  --color-primary:    #0b0b92;
+  --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
+  --color-secondary:  #26b6bb;
+  --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 75%, black);
+}
