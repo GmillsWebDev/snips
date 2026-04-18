@@ -12,8 +12,8 @@
 <div class="booking-page">
   <header class="booking-page__header" style="--shop-brand: {data.branding.color_secondary ?? 'var(--color-primary)'}">
     <div class="booking-page__header-inner container">
-      {#if shop.logo_url}
-        <img src={shop.logo_url} alt="{shop.name} logo" class="booking-page__logo" />
+      {#if data.branding.logo_url}
+        <img src={data.branding.logo_url} alt="{shop.name} logo" class="booking-page__logo" />
       {:else}
         <span class="booking-page__shop-name">{shop.name}</span>
       {/if}

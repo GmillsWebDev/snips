@@ -6,19 +6,19 @@ import type { PageServerLoad } from './$types'
 // The load function runs on every request to this booking page.
 // It fetches the shop details based on the slug in the URL.
 export const load: PageServerLoad = async ({ params, locals }) => {
-  // Query the 'shops' table for a shop with the given slug and is_active = true
-  const { data: shop } = await locals.supabase
+  const { data: shop, error: dbError } = await locals.supabase
     .from('shops')
-    .select('name, logo_url, brand_colour, plan_type')
+    .select('name, plan_type, client_branding(color_primary, color_secondary, logo_url)')
     .eq('slug', params.slug)
     .eq('is_active', true)
     .single()
 
-  // If no shop is found, throw a 404 error
-  if (!shop) {
-    error(404, 'Shop not found')
+  // PGRST116 = no rows returned — treat as 404.
+  // Any other DB error is a genuine server fault.
+  if (dbError) {
+    if (dbError.code === 'PGRST116') error(404, 'Shop not found')
+    throw dbError
   }
 
-  // Return the shop data to the page
   return { shop }
 }
