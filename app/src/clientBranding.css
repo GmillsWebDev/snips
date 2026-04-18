@@ -7,9 +7,5 @@
    branding is available (e.g. unauthenticated, no slug in URL).
 =========================== */
 
-:root {
-  --color-primary:    #0b0b92;
-  --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
-  --color-secondary:  #26b6bb;
-  --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 75%, black);
-}
+/* No rules needed here — default values live in app.css.
+   The layout applies DB values at runtime via document.documentElement.style.setProperty(). */
