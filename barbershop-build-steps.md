@@ -23,10 +23,10 @@
 
 ## 3 — Public Booking Flow
 - [x] 3.1 Shop landing page (`/book/[slug]`) — page file created, seed data ready for testing
-- [ ] 3.2 Service selection step
-- [ ] 3.3 Date & time picker (calls `get-available-slots` Edge Function)
-- [ ] 3.4 Customer details step (guest or login)
-- [ ] 3.5 Booking confirmation page
+- [x] 3.2 Service selection step
+- [x] 3.3 Date & time picker (calls `get-available-slots` Edge Function)
+- [x] 3.4 Customer details step (guest or login)
+- [x] 3.5 Booking confirmation page
 - [ ] 3.6 Guest magic link email via Brevo
 
 ---

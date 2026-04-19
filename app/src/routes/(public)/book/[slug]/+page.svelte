@@ -9,6 +9,7 @@
   import DatePicker from '$lib/components/booking/DatePicker.svelte'
   import CustomerDetails from '$lib/components/booking/CustomerDetails.svelte'
   import type { CustomerDetails as CustomerDetailsType } from '$lib/components/booking/CustomerDetails.svelte'
+  import BookingSummary from '$lib/components/booking/BookingSummary.svelte'
 
   type Step = 'service' | 'datetime' | 'customer' | 'confirmation'
 
@@ -172,7 +173,21 @@
 
       {#if step === 'confirmation'}
         <div class="step">
-          <!-- confirmation step — coming soon -->
+          {#if booking.customer && booking.service_id && booking.start_at}
+            {@const selectedService = services.find(s => s.id === booking.service_id)}
+            {#if selectedService}
+              <BookingSummary
+                shop_name={shop.name}
+                service={selectedService}
+                start_at={booking.start_at}
+                timezone={shop.timezone}
+                customer={booking.customer}
+                onback={() => {
+                  step = booking.customer?.is_guest ? 'customer' : 'datetime'
+                }}
+              />
+            {/if}
+          {/if}
         </div>
       {/if}
     </div>
