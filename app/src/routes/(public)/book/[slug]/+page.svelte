@@ -1,21 +1,91 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
+  import { goto } from '$app/navigation'
+  import { page } from '$app/stores'
   import type { PageData } from './$types'
+  import { createSupabaseBrowserClient } from '$lib/supabase'
   import Button from '$lib/components/ui/Button.svelte'
   import ServicePicker from '$lib/components/booking/ServicePicker.svelte'
   import DatePicker from '$lib/components/booking/DatePicker.svelte'
+  import CustomerDetails from '$lib/components/booking/CustomerDetails.svelte'
+  import type { CustomerDetails as CustomerDetailsType } from '$lib/components/booking/CustomerDetails.svelte'
 
-  type Step = 'service' | 'datetime'
+  type Step = 'service' | 'datetime' | 'customer' | 'confirmation'
 
   type BookingState = {
     service_id: string | null
     start_at: string | null
+    customer: CustomerDetailsType | null
   }
+
+  const DRAFT_KEY = 'snips_booking_draft'
 
   let { data }: { data: PageData } = $props()
   let { shop, services, barber_id } = data
 
+  const supabase = createSupabaseBrowserClient()
+
   let step = $state<Step>('service')
-  let booking = $state<BookingState>({ service_id: null, start_at: null })
+  let booking = $state<BookingState>({ service_id: null, start_at: null, customer: null })
+  let skipLoading = $state(false)
+
+  // When a logged-in user leaves the datetime step, fetch their customer record
+  // and jump straight to confirmation, bypassing the customer details step entirely.
+  async function advanceFromDatetime() {
+    if (!data.user) {
+      step = 'customer'
+      return
+    }
+
+    skipLoading = true
+    const { data: rec } = await supabase
+      .from('customers')
+      .select('id, first_name, last_name, email, phone')
+      .eq('shop_id', shop.id)
+      .eq('user_id', data.user.id)
+      .maybeSingle()
+    skipLoading = false
+
+    if (rec) {
+      booking.customer = {
+        first_name: rec.first_name,
+        last_name:  rec.last_name,
+        email:      rec.email,
+        phone:      rec.phone ?? '',
+        is_guest:   false,
+        customer_id: rec.id,
+      }
+    }
+
+    step = 'confirmation'
+  }
+
+  // If the user returns from /login with a saved draft, restore their progress
+  // and skip the customer step (they're now logged in).
+  onMount(async () => {
+    if (!data.user) return
+    try {
+      const raw = sessionStorage.getItem(DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw)
+      if (draft.shop_slug !== $page.params.slug) return
+      sessionStorage.removeItem(DRAFT_KEY)
+      if (draft.service_id) booking.service_id = draft.service_id
+      if (draft.start_at)   booking.start_at   = draft.start_at
+      if (draft.service_id && draft.start_at) await advanceFromDatetime()
+    } catch {}
+  })
+
+  function handleLoginRedirect() {
+    try {
+      sessionStorage.setItem(DRAFT_KEY, JSON.stringify({
+        shop_slug:  $page.params.slug,
+        service_id: booking.service_id,
+        start_at:   booking.start_at,
+      }))
+    } catch {}
+    goto(`/login?redirectTo=/book/${$page.params.slug}`)
+  }
 </script>
 
 <svelte:head>
@@ -46,7 +116,7 @@
             <Button
               edges="soft"
               disabled={booking.service_id === null}
-              onclick={() => step = 'datetime'}
+              onclick={() => (step = 'datetime')}
             >Next</Button>
           </div>
         </div>
@@ -68,8 +138,41 @@
 
           <div class="step__actions step__actions--split">
             <Button edges="soft" variant="secondary" onclick={() => { step = 'service'; booking.start_at = null }}>Back</Button>
-            <Button edges="soft" disabled={booking.start_at === null}>Next</Button>
+            <Button
+              edges="soft"
+              disabled={booking.start_at === null || skipLoading}
+              loading={skipLoading}
+              onclick={advanceFromDatetime}
+            >Next</Button>
           </div>
+        </div>
+      {/if}
+
+      {#if step === 'customer'}
+        <div class="step">
+          <CustomerDetails
+            bind:customer={booking.customer}
+            onloginredirect={handleLoginRedirect}
+          />
+
+          <div class="step__actions step__actions--split">
+            <Button
+              edges="soft"
+              variant="secondary"
+              onclick={() => { step = 'datetime'; booking.customer = null }}
+            >Back</Button>
+            <Button
+              edges="soft"
+              disabled={booking.customer === null}
+              onclick={() => (step = 'confirmation')}
+            >Next</Button>
+          </div>
+        </div>
+      {/if}
+
+      {#if step === 'confirmation'}
+        <div class="step">
+          <!-- confirmation step — coming soon -->
         </div>
       {/if}
     </div>

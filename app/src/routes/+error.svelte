@@ -31,6 +31,10 @@
     <p class="error-page__body">{message.body}</p>
     <Button edges="soft" size="md" onclick={() => history.back()}>Go back</Button>
     <a class="error-page__home" href="/">Return to home</a>
+    <div class="error-page__timestamp">
+      <span>Error timestamp:</span>
+      <span>{new Date().toLocaleString()}</span>
+    </div>
   </div>
 </div>
 
@@ -73,5 +77,12 @@
     margin-top: var(--space-2);
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  .error-page__timestamp {
+    margin-top: var(--space-4);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-subtle);
+    text-align: center;
   }
 </style>
