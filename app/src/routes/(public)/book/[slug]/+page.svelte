@@ -2,7 +2,7 @@
   import type { PageData } from './$types'
   import Button from '$lib/components/ui/Button.svelte'
   import ServicePicker from '$lib/components/booking/ServicePicker.svelte'
-  import DateTimePicker from '$lib/components/booking/DateTimePicker.svelte'
+  import DatePicker from '$lib/components/booking/DatePicker.svelte'
 
   type Step = 'service' | 'datetime'
 
@@ -55,7 +55,7 @@
       {#if step === 'datetime'}
         <div class="step">
           {#if barber_id && booking.service_id}
-            <DateTimePicker
+            <DatePicker
               {barber_id}
               service_id={booking.service_id}
               booking_window_days={shop.booking_window_days}
