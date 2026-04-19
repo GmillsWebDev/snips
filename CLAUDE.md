@@ -50,6 +50,7 @@ Always use runes syntax. Never use legacy Svelte 4 syntax.
 let { value, children } = $props()
 let count = $state(0)
 let doubled = $derived(count * 2)
+let label = $derived.by(() => (count > 1 ? 'items' : 'item'))
 {@render children()}
 
 <!-- ❌ Wrong — Svelte 4 legacy -->
@@ -60,9 +61,11 @@ $: doubled = count * 2
 
 - Use `$props()` instead of `export let`
 - Use `$state()` instead of `let` for reactive variables
-- Use `$derived()` instead of `$:` for derived values
+- Use `$derived(expr)` for simple derived values; use `$derived.by(() => { ... })` for multi-line or conditional logic
+- Use `$effect(() => { ... })` for side effects that must run when reactive state changes (e.g. syncing a derived value to a `$bindable` prop). Keep effects minimal — prefer `$derived` where possible
 - Use `{@render children()}` instead of `<slot />`
 - Use `onclick` not `on:click` for event handlers
+- Use `export type Foo = { ... }` to export TypeScript types from a `.svelte` file — this is fine. The banned pattern is `export let` for props
 
 ---
 
@@ -81,11 +84,12 @@ Always in this order:
 
 ```svelte
 <script lang="ts">
-  // 1. Type definitions first
+  // 1. Type definitions / exported types first
   // 2. Props via $props()
   // 3. State via $state()
-  // 4. Derived values via $derived()
-  // 5. Functions
+  // 4. Derived values via $derived() / $derived.by()
+  // 5. Effects via $effect()
+  // 6. Functions
 </script>
 
 <!-- template -->
@@ -291,7 +295,7 @@ Use Supabase's generated types where available. When querying with `.select()`, 
 ## What NOT to Do
 
 - ❌ Do not use Tailwind classes
-- ❌ Do not use `export let` (Svelte 4 syntax)
+- ❌ Do not use `export let` for props (Svelte 4 syntax) — use `$props()`. `export type` is fine
 - ❌ Do not use `<slot />` (use `{@render children()}`)
 - ❌ Do not use `on:click` (use `onclick`)
 - ❌ Do not hardcode colours or spacing — use CSS variables
