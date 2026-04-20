@@ -9,7 +9,7 @@ function safeRedirectTo(value: string | null): string {
 
 export const load: PageServerLoad = async ({ locals, url }) => {
   const { user } = await locals.safeGetSession()
-  if (user) redirect(303, safeRedirectTo(url.searchParams.get('redirectTo')))
+  if (user) return redirect(303, safeRedirectTo(url.searchParams.get('redirectTo')))
   return {}
 }
 
@@ -32,6 +32,6 @@ export const actions: Actions = {
       return fail(401, { error: 'Invalid email or password' })
     }
 
-    redirect(303, safeRedirectTo(url.searchParams.get('redirectTo')))
+    return redirect(303, safeRedirectTo(url.searchParams.get('redirectTo')))
   }
 }

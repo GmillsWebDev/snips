@@ -163,6 +163,6 @@ export const actions: Actions = {
       })
     }
 
-    redirect(303, `/book/${params.slug}/confirm?id=${booking.id}`)
+    return redirect(303, `/book/${params.slug}/confirm?id=${booking.id}`)
   },
 }

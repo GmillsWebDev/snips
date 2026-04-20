@@ -2,8 +2,8 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 
 const createAdminClient = () =>
   createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    Deno.env.get("SUPABASE_URL") ?? "",
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
 
 const sendEmail = async (options: {
@@ -14,7 +14,7 @@ const sendEmail = async (options: {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${Deno.env.get("RESEND_API_KEY")!}`,
+      "Authorization": `Bearer ${Deno.env.get("RESEND_API_KEY") ?? ""}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

@@ -88,12 +88,12 @@ Deno.serve(async (req) => {
     const dayStart = DateTime.fromObject(
       { year, month, day, hour: 0, minute: 0, second: 0 },
       { zone: timezone },
-    ).toUTC().toISO()!;
+    ).toUTC().toISO() ?? "";
 
     const dayEnd = DateTime.fromObject(
       { year, month, day, hour: 23, minute: 59, second: 59 },
       { zone: timezone },
-    ).toUTC().toISO()!;
+    ).toUTC().toISO() ?? "";
 
     const [{ data: existingBookings }, { data: blockedSlots }] = await Promise.all([
       supabase
@@ -136,7 +136,7 @@ Deno.serve(async (req) => {
 
       if (!isBooked && !isBlocked) {
         // Return as UTC ISO — the frontend formats to local time using the shop timezone
-        slots.push(cursor.toUTC().toISO()!);
+        slots.push(cursor.toUTC().toISO() ?? "");
       }
 
       cursor = cursor.plus({ minutes: slotDuration });
