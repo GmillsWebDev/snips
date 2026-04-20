@@ -1,0 +1,11 @@
+/* ===========================
+   Client Branding
+   These variables are overridden at runtime by the root layout,
+   which fetches the shop's client_branding row server-side and
+   applies the values as inline CSS custom properties on <html>.
+   The defaults here are fallbacks only — used when no shop
+   branding is available (e.g. unauthenticated, no slug in URL).
+=========================== */
+
+/* No rules needed here — default values live in app.css.
+   The layout applies DB values at runtime via document.documentElement.style.setProperty(). */
