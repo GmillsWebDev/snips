@@ -66,6 +66,7 @@ $: doubled = count * 2
 - Use `{@render children()}` instead of `<slot />`
 - Use `onclick` not `on:click` for event handlers
 - Use `export type Foo = { ... }` to export TypeScript types from a `.svelte` file — this is fine. The banned pattern is `export let` for props
+- **Never destructure `data` at the top of a page component.** Always reference `data.x` directly in the template. Destructuring (`const { booking } = data`) copies the value at mount and breaks reactivity when SvelteKit updates `data` during same-route navigation (e.g. `/admin/bookings/[id]` → another `[id]`).
 
 ---
 
@@ -304,6 +305,7 @@ Use Supabase's generated types where available. When querying with `.select()`, 
 - ❌ Do not skip error handling on Supabase queries
 - ❌ Do not do auth checks in `.svelte` files — use server load functions
 - ❌ Do not import `$lib/server/*` in browser/component files
+- ❌ Do not destructure `data` from `$props()` in page components — reference `data.x` directly so same-route navigations re-render correctly
 
 ---
 
