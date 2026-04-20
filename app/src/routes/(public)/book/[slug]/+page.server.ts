@@ -155,6 +155,14 @@ export const actions: Actions = {
 
     if (bookingErr || !booking) return fail(500, { error: 'Could not create booking. Please try again.' })
 
+    if (is_guest) {
+      const origin = new URL(request.url).origin
+      const redirectTo = `${origin}/book/${params.slug}/confirm?id=${booking.id}`
+      await admin.functions.invoke('send-guest-booking-link', {
+        body: { booking_id: booking.id, email, redirect_to: redirectTo },
+      })
+    }
+
     redirect(303, `/book/${params.slug}/confirm?id=${booking.id}`)
   },
 }
