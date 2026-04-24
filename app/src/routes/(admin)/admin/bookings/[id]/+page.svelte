@@ -4,9 +4,20 @@
   import Button from '$lib/components/ui/Button.svelte'
   import type { PageData, ActionData } from './$types'
 
+  import chevron from '$lib/assets/icons/chevronDown.svg'
+
   let { data, form }: { data: PageData; form: ActionData } = $props()
 
-  let submitting = $state<'accept' | 'reject' | null>(null)
+  let submitting = $state<'accept' | 'reject' | 'complete' | 'noshow' | null>(null)
+
+  let notesOpen = $state(false)
+  let notesText = $state(data.booking.internalNotes ?? '')
+  let notesSubmitting = $state(false)
+  let notesSaved = $state(false)
+
+  $effect(() => {
+    notesText = data.booking.internalNotes ?? ''
+  })
 
   function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`
@@ -84,7 +95,64 @@
       </div>
     </section>
 
-  {:else if data.booking.status === 'accepted' || data.booking.status === 'rejected'}
+  {:else if data.booking.status === 'accepted'}
+    <section class="actions-panel">
+      <h2 class="actions-panel__title">Actions</h2>
+
+      {#if form?.error}
+        <p class="actions-panel__error">{form.error}</p>
+      {/if}
+
+      <div class="actions-panel__buttons">
+        <form
+          method="post"
+          action="?/complete"
+          use:enhance={() => {
+            submitting = 'complete'
+            return async ({ update }) => {
+              submitting = null
+              await update()
+            }
+          }}
+        >
+          <Button
+            type="submit"
+            variant="accept"
+            size="md"
+            edges="soft"
+            disabled={submitting !== null}
+            loading={submitting === 'complete'}
+          >
+            {submitting === 'complete' ? 'Saving…' : 'Mark as completed'}
+          </Button>
+        </form>
+
+        <form
+          method="post"
+          action="?/noshow"
+          use:enhance={() => {
+            submitting = 'noshow'
+            return async ({ update }) => {
+              submitting = null
+              await update()
+            }
+          }}
+        >
+          <Button
+            type="submit"
+            variant="reject"
+            size="md"
+            edges="soft"
+            disabled={submitting !== null}
+            loading={submitting === 'noshow'}
+          >
+            {submitting === 'noshow' ? 'Saving…' : 'Mark as no-show'}
+          </Button>
+        </form>
+      </div>
+    </section>
+
+  {:else if data.booking.status === 'rejected' || data.booking.status === 'completed' || data.booking.status === 'no_show'}
     <section class="actions-panel actions-panel--resolved">
       <Badge status={data.booking.status} />
       <span class="actions-panel__resolved-note">
@@ -211,22 +279,74 @@
 
   
 
-  <!--
-  ═══════════════════════════════════════════════════════
-  ACTIONS — future steps
+  <!-- ── Internal notes ──────────────────────────────── -->
+  <section class="notes-panel">
+    <button
+      type="button"
+      class="notes-panel__toggle"
+      onclick={() => { notesOpen = !notesOpen }}
+      aria-expanded={notesOpen}
+    >
+      <span class="notes-panel__toggle-label">
+        Internal notes
+        <span class="notes-panel__subtitle">— not visible to customer</span>
+      </span>
+      <span class="notes-panel__chevron" class:notes-panel__chevron--open={notesOpen}>
+        <img src={chevron} alt="Toggle notes">
+      </span>
+    </button>
 
-  Step 4.5 — Complete / No-show (accepted bookings only)
-  ─────────────────────────────────────────────────────
-  Show two buttons when booking.status === 'accepted':
-    • Mark completed → POST action ?/complete  → sets status to 'completed', fires review_invite email
-    • Mark no-show   → POST action ?/noshow    → sets status to 'no_show', internal log only
+    {#if notesSaved && !notesOpen}
+      <span class="notes-panel__saved notes-panel__saved--inline">Saved</span>
+    {/if}
 
-  Step 4.6 — Internal notes
-  ─────────────────────────────────────────────────────
-  Textarea + save button → POST action ?/saveNotes
-  Saves to bookings.internal_notes (owner/barber visible only, never shown to customer)
-  ═══════════════════════════════════════════════════════
-  -->
+    {#if notesOpen}
+      <form
+        method="post"
+        action="?/saveNotes"
+        use:enhance={() => {
+          notesSubmitting = true
+          return async ({ result, update }) => {
+            notesSubmitting = false
+            if (result.type === 'success') {
+              notesSaved = true
+              notesOpen = false
+              setTimeout(() => { notesSaved = false }, 2000)
+            }
+            await update()
+          }
+        }}
+      >
+        <textarea
+          name="notes"
+          class="notes-panel__textarea"
+          bind:value={notesText}
+          placeholder="Add internal notes visible only to staff…"
+          disabled={notesSubmitting}
+          rows="4"
+        ></textarea>
+
+        <div class="notes-panel__footer">
+          {#if form?.notesError}
+            <p class="notes-panel__error">{form.notesError}</p>
+          {:else}
+            <span></span>
+          {/if}
+
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            edges="soft"
+            disabled={notesSubmitting}
+            loading={notesSubmitting}
+          >
+            Save notes
+          </Button>
+        </div>
+      </form>
+    {/if}
+  </section>
 
 </div>
 
@@ -477,6 +597,112 @@
   .actions-panel__resolved-note {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  /* ── Notes panel ─────────────────────────────────── */
+
+  .notes-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .notes-panel__toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+  }
+
+  .notes-panel__toggle-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .notes-panel__subtitle {
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .notes-panel__chevron {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    transition: transform 0.2s ease;
+    line-height: 1;
+    img{
+      width: 1.2rem;
+    }
+  }
+
+  .notes-panel__chevron--open {
+    transform: rotate(180deg);
+  }
+
+  .notes-panel__saved--inline {
+    font-size: var(--font-size-sm);
+    color: var(--color-accepted-text);
+    animation: fade-out 2s ease forwards;
+  }
+
+  .notes-panel__textarea {
+    width: 100%;
+    resize: vertical;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-3);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    line-height: 1.5;
+    transition: var(--transition);
+    box-sizing: border-box;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  .notes-panel__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .notes-panel__error {
+    font-size: var(--font-size-sm);
+    color: var(--color-rejected-text);
+    background: var(--color-rejected-bg);
+    border: 1px solid var(--color-rejected-text);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  @keyframes fade-out {
+    0%   { opacity: 1; }
+    60%  { opacity: 1; }
+    100% { opacity: 0; }
   }
 
   /* ── ─────────────────────────────────────────────── */

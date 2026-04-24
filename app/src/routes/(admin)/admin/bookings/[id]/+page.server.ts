@@ -22,6 +22,7 @@ export type BookingDetail = {
   createdAt: string
   updatedAt: string
   notes: string | null
+  internalNotes: string | null
   cancellationReason: string | null
   depositPaidPence: number
   customer: {
@@ -107,6 +108,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       start_at,
       end_at,
       notes,
+      internal_notes,
       cancellation_reason,
       deposit_paid_pence,
       created_at,
@@ -169,6 +171,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     createdAt: formatDateTime(data.created_at),
     updatedAt: formatDateTime(data.updated_at),
     notes: data.notes ?? null,
+    internalNotes: data.internal_notes ?? null,
     cancellationReason: data.cancellation_reason ?? null,
     depositPaidPence: data.deposit_paid_pence ?? 0,
     customer: {
@@ -189,13 +192,40 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 }
 
 export const actions: Actions = {
-  accept: ({ params, locals }) => setBookingStatus(params.id, 'accepted', locals),
-  reject: ({ params, locals }) => setBookingStatus(params.id, 'rejected', locals),
+  accept:   ({ params, locals }) => setBookingStatus(params.id, 'accepted',  'pending',  locals),
+  reject:   ({ params, locals }) => setBookingStatus(params.id, 'rejected',  'pending',  locals),
+  complete: ({ params, locals }) => setBookingStatus(params.id, 'completed', 'accepted', locals),
+  noshow:   ({ params, locals }) => setBookingStatus(params.id, 'no_show',   'accepted', locals),
+
+  saveNotes: async ({ params, request, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(403, { notesError: 'Not authenticated' })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail(403, { notesError: 'Not authorized' })
+
+    const formData = await request.formData()
+    const notes = formData.get('notes')
+    if (typeof notes !== 'string') return fail(400, { notesError: 'Invalid notes value' })
+
+    const admin = createSupabaseAdminClient()
+
+    const { error: updateErr } = await admin
+      .from('bookings')
+      .update({ internal_notes: notes.trim() || null })
+      .eq('id', params.id)
+      .eq('shop_id', role.shop_id)
+
+    if (updateErr) return fail(500, { notesError: 'Failed to save notes. Please try again.' })
+
+    return { notesSaved: true }
+  },
 }
 
 async function setBookingStatus(
   bookingId: string,
-  newStatus: 'accepted' | 'rejected',
+  newStatus: 'accepted' | 'rejected' | 'completed' | 'no_show',
+  expectedStatus: 'pending' | 'accepted',
   locals: App.Locals,
 ) {
   const { user } = await locals.safeGetSession()
@@ -214,7 +244,7 @@ async function setBookingStatus(
     .single()
 
   if (fetchErr || !booking) return fail(404, { error: 'Booking not found' })
-  if (booking.status !== 'pending') return { success: true }
+  if (booking.status !== expectedStatus) return { success: true }
 
   const { error: updateErr } = await admin
     .from('bookings')
