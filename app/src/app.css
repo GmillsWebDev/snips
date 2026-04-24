@@ -45,6 +45,9 @@
   --color-noshow-bg: #fff7ed;
   --color-noshow-text: #9a3412;
 
+  --color-success: #166534;
+  --color-failure: #991b1b;
+
   /* Spacing */
   --space-1: 0.25rem;
   --space-2: 0.5rem;

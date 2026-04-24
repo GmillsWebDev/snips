@@ -1,6 +1,7 @@
-import { error } from '@sveltejs/kit'
+import { error, fail } from '@sveltejs/kit'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
-import type { PageServerLoad } from './$types'
+import { getRole } from '$lib/server/getRole'
+import type { PageServerLoad, Actions } from './$types'
 
 export type BookingStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed' | 'no_show'
 
@@ -19,6 +20,7 @@ export type BookingDetail = {
   startTime: string
   endTime: string
   createdAt: string
+  updatedAt: string
   notes: string | null
   cancellationReason: string | null
   depositPaidPence: number
@@ -108,6 +110,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       cancellation_reason,
       deposit_paid_pence,
       created_at,
+      updated_at,
       customers ( first_name, last_name, email, phone ),
       services ( name, duration_minutes, price_pence ),
       barbers ( name ),
@@ -164,6 +167,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     startTime: formatTime(data.start_at),
     endTime: formatTime(data.end_at),
     createdAt: formatDateTime(data.created_at),
+    updatedAt: formatDateTime(data.updated_at),
     notes: data.notes ?? null,
     cancellationReason: data.cancellation_reason ?? null,
     depositPaidPence: data.deposit_paid_pence ?? 0,
@@ -182,4 +186,43 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
   }
 
   return { booking, relatedBookings, backHref }
+}
+
+export const actions: Actions = {
+  accept: ({ params, locals }) => setBookingStatus(params.id, 'accepted', locals),
+  reject: ({ params, locals }) => setBookingStatus(params.id, 'rejected', locals),
+}
+
+async function setBookingStatus(
+  bookingId: string,
+  newStatus: 'accepted' | 'rejected',
+  locals: App.Locals,
+) {
+  const { user } = await locals.safeGetSession()
+  if (!user) return fail(403, { error: 'Not authenticated' })
+
+  const role = await getRole(locals.supabase, user.id)
+  if (!role) return fail(403, { error: 'Not authorized' })
+
+  const admin = createSupabaseAdminClient()
+
+  const { data: booking, error: fetchErr } = await admin
+    .from('bookings')
+    .select('id, status')
+    .eq('id', bookingId)
+    .eq('shop_id', role.shop_id)
+    .single()
+
+  if (fetchErr || !booking) return fail(404, { error: 'Booking not found' })
+  if (booking.status !== 'pending') return { success: true }
+
+  const { error: updateErr } = await admin
+    .from('bookings')
+    .update({ status: newStatus })
+    .eq('id', bookingId)
+    .eq('shop_id', role.shop_id)
+
+  if (updateErr) return fail(500, { error: 'Failed to update booking status. Please try again.' })
+
+  return { success: true }
 }

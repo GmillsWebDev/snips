@@ -1,8 +1,12 @@
 <script lang="ts">
+  import { enhance } from '$app/forms'
   import Badge from '$lib/components/ui/Badge.svelte'
-  import type { PageData } from './$types'
+  import Button from '$lib/components/ui/Button.svelte'
+  import type { PageData, ActionData } from './$types'
 
-  let { data }: { data: PageData } = $props()
+  let { data, form }: { data: PageData; form: ActionData } = $props()
+
+  let submitting = $state<'accept' | 'reject' | null>(null)
 
   function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`
@@ -22,6 +26,72 @@
     </div>
     <p class="detail-page__date">{data.booking.date}</p>
   </header>
+  <!-- ── Actions ─────────────────────────────────────── -->
+  {#if data.booking.status === 'pending'}
+    <section class="actions-panel">
+      <h2 class="actions-panel__title">Actions</h2>
+
+      {#if form?.error}
+        <p class="actions-panel__error">{form.error}</p>
+      {/if}
+
+      <div class="actions-panel__buttons">
+        <form
+          method="post"
+          action="?/accept"
+          use:enhance={() => {
+            submitting = 'accept'
+            return async ({ update }) => {
+              submitting = null
+              await update()
+            }
+          }}
+        >
+          <Button
+            type="submit"
+            variant="accept"
+            size="md"
+            edges="soft"
+            disabled={submitting !== null}
+            loading={submitting === 'accept'}
+          >
+            {submitting === 'accept' ? 'Accepting…' : 'Accept booking'}
+          </Button>
+        </form>
+
+        <form
+          method="post"
+          action="?/reject"
+          use:enhance={() => {
+            submitting = 'reject'
+            return async ({ update }) => {
+              submitting = null
+              await update()
+            }
+          }}
+        >
+          <Button
+            type="submit"
+            variant="reject"
+            size="md"
+            edges="soft"
+            disabled={submitting !== null}
+            loading={submitting === 'reject'}
+          >
+            {submitting === 'reject' ? 'Rejecting…' : 'Reject booking'}
+          </Button>
+        </form>
+      </div>
+    </section>
+
+  {:else if data.booking.status === 'accepted' || data.booking.status === 'rejected'}
+    <section class="actions-panel actions-panel--resolved">
+      <Badge status={data.booking.status} />
+      <span class="actions-panel__resolved-note">
+        Status updated {data.booking.updatedAt}
+      </span>
+    </section>
+  {/if}
 
   <div class="detail-grid">
 
@@ -139,15 +209,11 @@
 
   </div>
 
+  
+
   <!--
   ═══════════════════════════════════════════════════════
-  ACTIONS — to be implemented in later steps
-
-  Step 4.4 — Accept / Reject (pending bookings only)
-  ─────────────────────────────────────────────────────
-  Show two buttons when booking.status === 'pending':
-    • Accept  → POST action ?/accept  → sets status to 'accepted', fires booking_accepted email
-    • Reject  → POST action ?/reject  → sets status to 'rejected', fires booking_rejected email
+  ACTIONS — future steps
 
   Step 4.5 — Complete / No-show (accepted bookings only)
   ─────────────────────────────────────────────────────
@@ -332,6 +398,87 @@
     color: var(--color-text-muted);
   }
 
+  /* ── Actions panel ───────────────────────────────── */
+
+  .actions-panel {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .actions-panel__title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .actions-panel__error {
+    font-size: var(--font-size-sm);
+    color: var(--color-rejected-text);
+    background: var(--color-rejected-bg);
+    border: 1px solid var(--color-rejected-text);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .actions-panel__buttons {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    padding: var(--space-2) var(--space-5);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+  }
+
+  .btn--accept {
+    background: var(--color-accepted-bg);
+    color: var(--color-accepted-text);
+    border-color: var(--color-accepted-text);
+
+    &:hover:not(:disabled) {
+      filter: brightness(0.92);
+    }
+  }
+
+  .btn--reject {
+    background: var(--color-rejected-bg);
+    color: var(--color-rejected-text);
+    border-color: var(--color-rejected-text);
+
+    &:hover:not(:disabled) {
+      filter: brightness(0.92);
+    }
+  }
+
+  .actions-panel--resolved {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .actions-panel__resolved-note {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
   /* ── ─────────────────────────────────────────────── */
 
   .detail-list__id {
@@ -341,4 +488,5 @@
     font-family: monospace;
     word-break: break-all;
   }
+
 </style>
