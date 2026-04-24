@@ -35,9 +35,9 @@
 - [x] 4.1 Admin dashboard (today's bookings, quick stats, needs-attention alerts)
 - [x] 4.2 Bookings list page (filterable by status, date, barber; contact reveal toggle; current-booking highlight; view button)
 - [x] 4.3 Single booking detail page (customer, appointment, service, notes, other bookings panel)
-- [ ] 4.4 Accept / reject actions with status update
-- [ ] 4.5 Mark as completed / no-show
-- [ ] 4.6 Internal notes on bookings
+- [x] 4.4 Accept / reject actions with status update
+- [x] 4.5 Mark as completed / no-show
+- [x] 4.6 Internal notes on bookings (collapsible, hidden by default)
 
 ---
 
