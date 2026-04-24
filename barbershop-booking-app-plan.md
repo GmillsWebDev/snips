@@ -31,7 +31,7 @@
 | Auth | Supabase Auth (email/password, magic link, guest flow) |
 | Email / SMS / WhatsApp | Brevo (transactional + scheduled) |
 | Payments (later) | Stripe |
-| Hosting | Vercel or Cloudflare Pages |
+| Hosting | Netlify |
 
 ---
 

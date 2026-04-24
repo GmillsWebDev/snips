@@ -1,5 +1,5 @@
 <script lang="ts">
-  type Variant = 'primary' | 'secondary' | 'disabled'
+  type Variant = 'primary' | 'secondary' | 'disabled' | 'accept' | 'reject'
   type Size = 'sm' | 'md' | 'lg'
   type Edges = 'sharp' | 'soft' | 'round'
 
@@ -77,6 +77,19 @@
     border-color: var(--color-secondary-hover, #e0e0e0);
     color: var(--color-on-secondary, #222);
   }
+  .btn--accept {
+    background-color: var(--color-success);
+    color: var(--color-white);
+    border: 1px solid var(--color-success);
+    transition: background 0.15s, color 0.15s, border 0.15s;
+  }
+  .btn--reject {
+    background-color: var(--color-failure);
+    color: var(--color-white);
+    border: 1px solid var(--color-failure);
+    transition: background 0.15s, color 0.15s, border 0.15s;
+  }
+
   .btn--disabled,
   .btn:disabled {
     background-color: var(--color-grey);
