@@ -20,7 +20,8 @@ function getLondonDayBounds(): { dayStart: string; dayEnd: string } {
   }
 }
 
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, depends }) => {
+  depends('app:dashboard')
   const { role } = await parent()
   const shopId = role.shop_id
 
@@ -64,6 +65,7 @@ export const load: PageServerLoad = async ({ parent }) => {
   }))
 
   return {
+    shopId,
     bookings,
     stats: {
       total:     raw.length,

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { invalidate } from '$app/navigation'
+  import { createSupabaseBrowserClient } from '$lib/supabase'
   import Badge from '$lib/components/ui/Badge.svelte'
   import type { PageData } from './$types'
 
@@ -9,6 +11,25 @@
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+  })
+
+  $effect(() => {
+    const supabase = createSupabaseBrowserClient()
+    const channel = supabase
+      .channel('dashboard-bookings')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `shop_id=eq.${data.shopId}`,
+        },
+        () => { invalidate('app:dashboard') },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   })
 </script>
 
