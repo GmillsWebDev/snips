@@ -4,6 +4,16 @@
 
   let { data }: { data: PageData } = $props()
 
+  const PAGE_SIZE = 3
+  let visibleCount = $state(PAGE_SIZE)
+
+  const visibleBookings = $derived(data.bookings.slice(0, visibleCount))
+  const hasMore = $derived(visibleCount < data.bookings.length)
+
+  function showMore() {
+    visibleCount += PAGE_SIZE
+  }
+
   function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`
   }
@@ -29,7 +39,7 @@
     </div>
   {:else}
     <ul class="bookings">
-      {#each data.bookings as booking (booking.id)}
+      {#each visibleBookings as booking (booking.id)}
         <li class="booking-card">
           <div class="booking-card__top">
             <span class="booking-card__service">{booking.service.name}</span>
@@ -47,11 +57,17 @@
           </div>
 
           <div class="booking-card__footer">
-            <a href="/bookings/{booking.id}" class="booking-card__link">View details &rarr;</a>
+            <a href="/booking/{booking.id}" class="booking-card__link">View details &rarr;</a>
           </div>
         </li>
       {/each}
     </ul>
+
+    {#if hasMore}
+      <button class="show-more" onclick={showMore}>
+        Show more ({data.bookings.length - visibleCount} remaining)
+      </button>
+    {/if}
   {/if}
 </div>
 
@@ -171,6 +187,23 @@
 
     &:hover {
       color: var(--color-primary-hover);
+    }
+  }
+
+  .show-more {
+    width: 100%;
+    padding: var(--space-3);
+    background: none;
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-lg);
+    color: var(--color-text-muted);
+    font-size: var(--font-size-sm);
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:hover {
+      border-color: var(--color-text-subtle);
+      color: var(--color-text);
     }
   }
 </style>
