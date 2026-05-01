@@ -56,9 +56,10 @@
         is_guest:   false,
         customer_id: rec.id,
       }
+      step = 'confirmation'
+    } else {
+      step = 'customer'
     }
-
-    step = 'confirmation'
   }
 
   // If the user returns from /login with a saved draft, restore their progress
@@ -154,6 +155,11 @@
           <CustomerDetails
             bind:customer={booking.customer}
             onloginredirect={handleLoginRedirect}
+            prefill={data.user ? {
+              first_name: data.user.user_metadata?.first_name ?? '',
+              last_name:  data.user.user_metadata?.last_name  ?? '',
+              email:      data.user.email ?? '',
+            } : null}
           />
 
           <div class="step__actions step__actions--split">

@@ -13,15 +13,17 @@
   let {
     customer = $bindable<CustomerDetails | null>(null),
     onloginredirect,
+    prefill = null,
   }: {
     customer?: CustomerDetails | null
     onloginredirect: () => void
+    prefill?: { first_name: string; last_name: string; email: string } | null
   } = $props()
 
-  let showForm = $state(false)
-  let first_name = $state('')
-  let last_name = $state('')
-  let email = $state('')
+  let showForm = $state(!!prefill)
+  let first_name = $state(prefill?.first_name ?? '')
+  let last_name = $state(prefill?.last_name ?? '')
+  let email = $state(prefill?.email ?? '')
   let phone = $state('')
   let touched = $state({ first_name: false, last_name: false, email: false, phone: false })
 
@@ -54,7 +56,7 @@
       last_name:  last_name.trim(),
       email:      email.trim(),
       phone:      phone.trim(),
-      is_guest:   true,
+      is_guest:   !prefill,
       customer_id: null,
     }
   })
@@ -87,18 +89,20 @@
   </div>
 
 {:else}
-<p class="login-prompt">
-    Got an account?
-    <button class="login-prompt__link" onclick={onloginredirect}>Log in</button>
-  </p>
+  {#if !prefill}
+    <p class="login-prompt">
+      Got an account?
+      <button class="login-prompt__link" onclick={onloginredirect}>Log in</button>
+    </p>
+  {/if}
   <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
   <div class="guest-form" onfocusout={handleFocusOut} role="group" aria-label="Guest details">
     <div class="name-row">
       <Input name="first_name" label="First name" bind:value={first_name} placeholder="Jane" required error={fieldErrors.first_name} />
       <Input name="last_name"  label="Last name"  bind:value={last_name}  placeholder="Smith" required error={fieldErrors.last_name} />
     </div>
-    <Input name="email" label="Email"        type="email" bind:value={email} placeholder="jane@example.com" required error={fieldErrors.email} />
-    <Input name="phone" label="Phone number" type="tel"   bind:value={phone} placeholder="07700 900123"     required error={fieldErrors.phone} />
+    <Input name="email" label="Email" type="email" bind:value={email} placeholder="jane@example.com" required readonly={!!prefill} error={fieldErrors.email} />
+    <Input name="phone" label="Phone number" type="tel" bind:value={phone} placeholder="07700 900123" required error={fieldErrors.phone} />
   </div>
   
 {/if}

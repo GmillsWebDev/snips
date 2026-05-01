@@ -7,7 +7,7 @@ export const load: PageServerLoad = async ({ locals }) => {
   // Get the current user session (if any)
   const { user } = await locals.safeGetSession()
   // If user is logged in, redirect to dashboard
-  if (user) redirect(303, '/dashboard')
+  if (user) return redirect(303, '/dashboard')
   // Otherwise, render the registration page
   return {}
 }

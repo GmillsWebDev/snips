@@ -8,6 +8,7 @@
     error = '',
     required = false,
     disabled = false,
+    readonly = false,
   }: {
     label?: string
     name: string
@@ -17,6 +18,7 @@
     error?: string
     required?: boolean
     disabled?: boolean
+    readonly?: boolean
   } = $props()
 </script>
 
@@ -34,6 +36,7 @@
     {placeholder}
     {required}
     {disabled}
+    {readonly}
     bind:value
     class="field__input {error ? 'field__input--error' : ''}"
   />
