@@ -1,9 +1,12 @@
 <script lang="ts">
+  import { enhance } from '$app/forms'
   import Badge from '$lib/components/ui/Badge.svelte'
   import Button from '$lib/components/ui/Button.svelte'
-  import type { PageData } from './$types'
+  import type { PageData, ActionData } from './$types'
 
-  let { data }: { data: PageData } = $props()
+  let { data, form }: { data: PageData; form: ActionData } = $props()
+
+  let cancelling = $state(false)
 
   function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`
@@ -77,7 +80,24 @@
 
     {#if canCancel}
       <div class="booking-detail__actions">
-        <Button variant="secondary" edges="soft" disabled>Cancel booking</Button>
+        {#if form?.error}
+          <p class="cancel-error" role="alert">{form.error}</p>
+        {/if}
+        <form
+          method="POST"
+          action="?/cancel"
+          use:enhance={() => {
+            cancelling = true
+            return async ({ update }) => {
+              await update()
+              cancelling = false
+            }
+          }}
+        >
+          <Button variant="secondary" edges="soft" type="submit" disabled={cancelling}>
+            {cancelling ? 'Cancelling…' : 'Cancel booking'}
+          </Button>
+        </form>
       </div>
     {/if}
   </div>
@@ -162,5 +182,16 @@
   .booking-detail__actions {
     border-top: 1px solid var(--color-border);
     padding-top: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .cancel-error {
+    font-size: var(--font-size-sm);
+    color: var(--color-error);
+    padding: var(--space-3) var(--space-4);
+    background: color-mix(in srgb, var(--color-error) 8%, var(--color-surface));
+    border-radius: var(--radius-md);
   }
 </style>

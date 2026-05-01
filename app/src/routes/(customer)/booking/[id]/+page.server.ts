@@ -1,6 +1,6 @@
-import { error, redirect } from '@sveltejs/kit'
+import { error, fail, redirect } from '@sveltejs/kit'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
-import type { PageServerLoad } from './$types'
+import type { PageServerLoad, Actions } from './$types'
 
 export type BookingStatus = 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed' | 'no_show'
 
@@ -111,4 +111,43 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
   }
 
   return { booking }
+}
+
+export const actions: Actions = {
+  cancel: async ({ params, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(401, { error: 'Not authenticated' })
+
+    const admin = createSupabaseAdminClient()
+
+    const { data: customer } = await admin
+      .from('customers')
+      .select('id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (!customer) return fail(403, { error: 'Forbidden' })
+
+    const { data: booking, error: fetchErr } = await admin
+      .from('bookings')
+      .select('id, customer_id, status')
+      .eq('id', params.id)
+      .single()
+
+    if (fetchErr || !booking) return fail(404, { error: 'Booking not found' })
+    if (booking.customer_id !== customer.id) return fail(403, { error: 'Forbidden' })
+
+    if (booking.status !== 'pending' && booking.status !== 'accepted') {
+      return fail(400, { error: 'This booking cannot be cancelled' })
+    }
+
+    const { error: updateErr } = await admin
+      .from('bookings')
+      .update({ status: 'cancelled', cancellation_reason: 'Cancelled by customer' })
+      .eq('id', params.id)
+
+    if (updateErr) return fail(500, { error: 'Could not cancel the booking. Please try again.' })
+
+    return redirect(303, '/dashboard')
+  },
 }
