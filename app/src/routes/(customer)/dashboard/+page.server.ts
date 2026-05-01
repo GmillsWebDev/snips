@@ -2,13 +2,13 @@ import { redirect } from '@sveltejs/kit'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
 import type { PageServerLoad } from './$types'
 
-export type BookingStatus = 'pending' | 'accepted'
+export type BookingStatus = 'pending' | 'accepted' | 'completed' | 'cancelled' | 'no_show' | 'rejected'
 
 export type UpcomingBooking = {
   id: string
   date: string
   time: string
-  status: BookingStatus
+  status: 'pending' | 'accepted'
   notes: string | null
   service: {
     name: string
@@ -18,6 +18,15 @@ export type UpcomingBooking = {
   barberName: string
   chairLabel: string | null
   shopSlug: string | null
+}
+
+export type PastBooking = {
+  id: string
+  date: string
+  time: string
+  status: BookingStatus
+  service: { name: string }
+  hasReview: boolean
 }
 
 const TIMEZONE = 'Europe/London'
@@ -55,8 +64,6 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
 
   let customerId: string | null = customerByUserId?.id ?? null
 
-  // Fallback: customer row exists but user_id was never set (e.g. booked before registering).
-  // Find by email, patch user_id so future lookups work, and show their bookings now.
   if (!customerId && user.email) {
     const admin = createSupabaseAdminClient()
     const { data: customerByEmail } = await admin
@@ -74,32 +81,50 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
     }
   }
 
-  if (!customerId) return { bookings: [] as UpcomingBooking[] }
+  if (!customerId) return { upcomingBookings: [] as UpcomingBooking[], pastBookings: [] as PastBooking[] }
 
-  const { data, error: bookingsError } = await locals.supabase
-    .from('bookings')
-    .select(`
-      id,
-      start_at,
-      status,
-      notes,
-      services ( name, duration_minutes, price_pence ),
-      barbers ( name ),
-      chairs ( label ),
-      shops ( slug )
-    `)
-    .eq('customer_id', customerId)
-    .in('status', ['pending', 'accepted'])
-    .gte('start_at', new Date().toISOString())
-    .order('start_at', { ascending: true })
+  const now = new Date().toISOString()
 
-  if (bookingsError) throw bookingsError
+  const [upcomingResult, pastResult] = await Promise.all([
+    locals.supabase
+      .from('bookings')
+      .select(`
+        id,
+        start_at,
+        status,
+        notes,
+        services ( name, duration_minutes, price_pence ),
+        barbers ( name ),
+        chairs ( label ),
+        shops ( slug )
+      `)
+      .eq('customer_id', customerId)
+      .in('status', ['pending', 'accepted'])
+      .gte('start_at', now)
+      .order('start_at', { ascending: true }),
 
-  const bookings: UpcomingBooking[] = (data ?? []).map(b => ({
+    locals.supabase
+      .from('bookings')
+      .select(`
+        id,
+        start_at,
+        status,
+        services ( name ),
+        reviews ( id )
+      `)
+      .eq('customer_id', customerId)
+      .or(`status.in.(completed,cancelled,no_show,rejected),and(status.in.(pending,accepted),start_at.lt.${now})`)
+      .order('start_at', { ascending: false }),
+  ])
+
+  if (upcomingResult.error) throw upcomingResult.error
+  if (pastResult.error) throw pastResult.error
+
+  const upcomingBookings: UpcomingBooking[] = (upcomingResult.data ?? []).map(b => ({
     id: b.id,
     date: formatDate(b.start_at),
     time: formatTime(b.start_at),
-    status: b.status as BookingStatus,
+    status: b.status as 'pending' | 'accepted',
     notes: b.notes ?? null,
     service: {
       name: b.services?.name ?? '',
@@ -111,5 +136,14 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
     shopSlug: b.shops?.slug ?? null,
   }))
 
-  return { bookings }
+  const pastBookings: PastBooking[] = (pastResult.data ?? []).map(b => ({
+    id: b.id,
+    date: formatDate(b.start_at),
+    time: formatTime(b.start_at),
+    status: b.status as BookingStatus,
+    service: { name: b.services?.name ?? '' },
+    hasReview: Array.isArray(b.reviews) ? b.reviews.length > 0 : b.reviews !== null,
+  }))
+
+  return { upcomingBookings, pastBookings }
 }

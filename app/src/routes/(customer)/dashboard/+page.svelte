@@ -4,11 +4,19 @@
 
   let { data }: { data: PageData } = $props()
 
+  type Tab = 'upcoming' | 'past'
+  let activeTab = $state<Tab>('upcoming')
+
   const PAGE_SIZE = 3
   let visibleCount = $state(PAGE_SIZE)
 
-  const visibleBookings = $derived(data.bookings.slice(0, visibleCount))
-  const hasMore = $derived(visibleCount < data.bookings.length)
+  const visibleUpcoming = $derived(data.upcomingBookings.slice(0, visibleCount))
+  const hasMore = $derived(visibleCount < data.upcomingBookings.length)
+
+  function switchTab(tab: Tab) {
+    activeTab = tab
+    visibleCount = PAGE_SIZE
+  }
 
   function showMore() {
     visibleCount += PAGE_SIZE
@@ -19,7 +27,7 @@
   }
 
   const bookSlug = $derived(
-    data.bookings.find(b => b.shopSlug)?.shopSlug ?? 'snips-test'
+    data.upcomingBookings.find(b => b.shopSlug)?.shopSlug ?? 'snips-test'
   )
 </script>
 
@@ -32,41 +40,97 @@
     <h1>Your Bookings</h1>
   </header>
 
-  {#if data.bookings.length === 0}
-    <div class="empty">
-      <p class="empty__message">You have no upcoming bookings.</p>
-      <a href="/book/{bookSlug}" class="empty__cta">Book an appointment</a>
-    </div>
-  {:else}
-    <ul class="bookings">
-      {#each visibleBookings as booking (booking.id)}
-        <li class="booking-card">
-          <div class="booking-card__top">
-            <span class="booking-card__service">{booking.service.name}</span>
-            <Badge status={booking.status} />
-          </div>
+  <div class="tab-group" role="tablist">
+    <button
+      role="tab"
+      aria-selected={activeTab === 'upcoming'}
+      class="tab-btn"
+      class:tab-btn--active={activeTab === 'upcoming'}
+      onclick={() => switchTab('upcoming')}
+    >
+      Upcoming
+      {#if data.upcomingBookings.length > 0}
+        <span class="tab-btn__count">{data.upcomingBookings.length}</span>
+      {/if}
+    </button>
+    <button
+      role="tab"
+      aria-selected={activeTab === 'past'}
+      class="tab-btn"
+      class:tab-btn--active={activeTab === 'past'}
+      onclick={() => switchTab('past')}
+    >
+      Past
+    </button>
+  </div>
 
-          <div class="booking-card__meta">
+  {#if activeTab === 'upcoming'}
+    {#if data.upcomingBookings.length === 0}
+      <div class="empty">
+        <p class="empty__message">You have no upcoming bookings.</p>
+        <a href="/book/{bookSlug}" class="empty__cta">Book an appointment</a>
+      </div>
+    {:else}
+      <ul class="bookings">
+        {#each visibleUpcoming as booking (booking.id)}
+          <li class="booking-card">
+            <div class="booking-card__top">
+              <span class="booking-card__service">{booking.service.name}</span>
+              <Badge status={booking.status} />
+            </div>
+
+            <div class="booking-card__meta">
+              <span class="booking-card__datetime">{booking.date} &middot; {booking.time}</span>
+              <span class="booking-card__detail">
+                {booking.service.durationMinutes} min
+                &middot;
+                {formatPrice(booking.service.pricePence)}
+              </span>
+              <span class="booking-card__barber">with {booking.barberName}</span>
+            </div>
+
+            <div class="booking-card__footer">
+              <a href="/booking/{booking.id}" class="booking-card__link">View details &rarr;</a>
+            </div>
+          </li>
+        {/each}
+      </ul>
+
+      {#if hasMore}
+        <button class="show-more" onclick={showMore}>
+          Show more ({data.upcomingBookings.length - visibleCount} remaining)
+        </button>
+      {/if}
+    {/if}
+  {/if}
+
+  {#if activeTab === 'past'}
+    {#if data.pastBookings.length === 0}
+      <div class="empty">
+        <p class="empty__message">No past bookings yet.</p>
+      </div>
+    {:else}
+      <ul class="bookings">
+        {#each data.pastBookings as booking (booking.id)}
+          <li class="booking-card booking-card--compact">
+            <div class="booking-card__top">
+              <span class="booking-card__service">{booking.service.name}</span>
+              <Badge status={booking.status} />
+            </div>
+
             <span class="booking-card__datetime">{booking.date} &middot; {booking.time}</span>
-            <span class="booking-card__detail">
-              {booking.service.durationMinutes} min
-              &middot;
-              {formatPrice(booking.service.pricePence)}
-            </span>
-            <span class="booking-card__barber">with {booking.barberName}</span>
-          </div>
 
-          <div class="booking-card__footer">
-            <a href="/booking/{booking.id}" class="booking-card__link">View details &rarr;</a>
-          </div>
-        </li>
-      {/each}
-    </ul>
-
-    {#if hasMore}
-      <button class="show-more" onclick={showMore}>
-        Show more ({data.bookings.length - visibleCount} remaining)
-      </button>
+            <div class="booking-card__footer">
+              <a href="/booking/{booking.id}" class="booking-card__link">View details &rarr;</a>
+              {#if booking.status === 'completed' && !booking.hasReview}
+                <a href="/booking/{booking.id}/review" class="booking-card__review-link">
+                  Leave a review
+                </a>
+              {/if}
+            </div>
+          </li>
+        {/each}
+      </ul>
     {/if}
   {/if}
 </div>
@@ -86,6 +150,53 @@
     font-weight: 700;
   }
 
+  /* ── Tabs ─────────────────────────────────────────────────── */
+  .tab-group {
+    display: flex;
+    gap: var(--space-2);
+    border-bottom: 2px solid var(--color-border);
+  }
+
+  .tab-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-4);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:hover {
+      color: var(--color-text);
+    }
+  }
+
+  .tab-btn--active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+  }
+
+  .tab-btn__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding: 0 var(--space-1);
+    background: var(--color-primary);
+    color: var(--color-on-primary);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+  }
+
+  /* ── Empty state ──────────────────────────────────────────── */
   .empty {
     background: var(--color-surface);
     border: 1px solid var(--color-border);
@@ -119,6 +230,7 @@
     }
   }
 
+  /* ── Booking cards ────────────────────────────────────────── */
   .bookings {
     list-style: none;
     padding: 0;
@@ -136,6 +248,10 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+
+  .booking-card--compact {
+    gap: var(--space-2);
   }
 
   .booking-card__top {
@@ -160,7 +276,7 @@
   .booking-card__datetime {
     font-size: var(--font-size-sm);
     font-weight: 500;
-    color: var(--color-text);
+    color: var(--color-text-muted);
   }
 
   .booking-card__detail {
@@ -174,6 +290,9 @@
   }
 
   .booking-card__footer {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
     border-top: 1px solid var(--color-border);
     padding-top: var(--space-3);
   }
@@ -190,6 +309,19 @@
     }
   }
 
+  .booking-card__review-link {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    margin-left: auto;
+    transition: var(--transition);
+
+    &:hover {
+      color: var(--color-text);
+    }
+  }
+
+  /* ── Show more ────────────────────────────────────────────── */
   .show-more {
     width: 100%;
     padding: var(--space-3);
