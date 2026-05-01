@@ -1,4 +1,5 @@
 import { redirect } from '@sveltejs/kit'
+import { createSupabaseAdminClient } from '$lib/server/supabase'
 import type { PageServerLoad } from './$types'
 
 export type BookingStatus = 'pending' | 'accepted'
@@ -44,14 +45,36 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
   const { user } = await locals.safeGetSession()
   if (!user) return redirect(303, '/login')
 
-  const { data: customer, error: customerError } = await locals.supabase
+  const { data: customerByUserId, error: customerError } = await locals.supabase
     .from('customers')
     .select('id')
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (customerError) throw customerError
-  if (!customer) return { bookings: [] as UpcomingBooking[] }
+
+  let customerId: string | null = customerByUserId?.id ?? null
+
+  // Fallback: customer row exists but user_id was never set (e.g. booked before registering).
+  // Find by email, patch user_id so future lookups work, and show their bookings now.
+  if (!customerId && user.email) {
+    const admin = createSupabaseAdminClient()
+    const { data: customerByEmail } = await admin
+      .from('customers')
+      .select('id')
+      .eq('email', user.email)
+      .maybeSingle()
+
+    if (customerByEmail) {
+      await admin
+        .from('customers')
+        .update({ user_id: user.id, is_guest: false })
+        .eq('id', customerByEmail.id)
+      customerId = customerByEmail.id
+    }
+  }
+
+  if (!customerId) return { bookings: [] as UpcomingBooking[] }
 
   const { data, error: bookingsError } = await locals.supabase
     .from('bookings')
@@ -65,7 +88,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
       chairs ( label ),
       shops ( slug )
     `)
-    .eq('customer_id', customer.id)
+    .eq('customer_id', customerId)
     .in('status', ['pending', 'accepted'])
     .gte('start_at', new Date().toISOString())
     .order('start_at', { ascending: true })

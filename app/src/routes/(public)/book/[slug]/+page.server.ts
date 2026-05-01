@@ -118,6 +118,8 @@ export const actions: Actions = {
     if (!is_guest && customer_id) {
       resolved_customer_id = customer_id
     } else {
+      const user_id = !is_guest ? (await locals.safeGetSession()).user?.id ?? null : null
+
       const { data: existing } = await admin
         .from('customers')
         .select('id')
@@ -126,11 +128,18 @@ export const actions: Actions = {
         .maybeSingle()
 
       if (existing) {
+        // Link auth account to this customer row if not already linked
+        if (user_id) {
+          await admin
+            .from('customers')
+            .update({ user_id, is_guest: false })
+            .eq('id', existing.id)
+        }
         resolved_customer_id = existing.id
       } else {
         const { data: newCustomer, error: custErr } = await admin
           .from('customers')
-          .insert({ shop_id: shop.id, first_name, last_name, email, phone, is_guest: true })
+          .insert({ shop_id: shop.id, first_name, last_name, email, phone, is_guest: !user_id, user_id })
           .select('id')
           .single()
         if (custErr || !newCustomer) return fail(500, { error: 'Could not save your details. Please try again.' })
