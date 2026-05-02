@@ -78,16 +78,16 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
   const needsAttention = (pendingResult.data ?? [])
     .map(b => ({
       id: b.id,
-      dateTime: new Date(b.start_at).toLocaleDateString('en-GB', {
+      dateTime: `${new Date(b.start_at).toLocaleDateString('en-GB', {
         timeZone: 'Europe/London',
         weekday: 'short',
         day: 'numeric',
         month: 'short',
-      }) + ' · ' + new Date(b.start_at).toLocaleTimeString('en-GB', {
+      })} · ${new Date(b.start_at).toLocaleTimeString('en-GB', {
         timeZone: 'Europe/London',
         hour: '2-digit',
         minute: '2-digit',
-      }),
+      })}`,
       customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
       serviceName: b.services?.name ?? '',
     }))

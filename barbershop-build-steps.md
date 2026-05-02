@@ -46,15 +46,15 @@
 - [x] 5.2 Customer dashboard (upcoming bookings)
 - [x] 5.3 Booking detail page (view, cancel, reschedule)
 - [x] 5.4 Booking history & review submission
-- [ ] 5.5 Account settings (profile, notification preferences)
+- [x] 5.5 Account settings (profile, notification preferences)
 
 ---
 
 ## 6 — Services & Schedule Management
-- [ ] 6.1 Service CRUD (name, price, duration, display order)
+- [ ] 6.1 Service CRUD (name, price, duration, display order, deposit amount)
 - [ ] 6.2 Availability rules (per barber, per day of week)
-- [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off)
-- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle)
+- [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off, one off days added)
+- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
 
 ---
 
