@@ -93,6 +93,9 @@
     <a href="/book/{$page.params.slug}" class="confirm-page__new-booking">
       Make another booking
     </a>
+    <a href="/dashboard" class="confirm-page__new-booking">
+      View your bookings
+    </a>
   </div>
 </div>
 
@@ -192,6 +195,8 @@
     color: var(--color-primary);
     text-decoration: underline;
     text-underline-offset: 2px;
+    display: block;
+    margin-bottom: var(--space-2);
 
     &:hover { color: var(--color-primary-hover); }
   }

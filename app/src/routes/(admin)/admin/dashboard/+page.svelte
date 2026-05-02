@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { invalidate } from '$app/navigation'
+  import { createSupabaseBrowserClient } from '$lib/supabase'
   import Badge from '$lib/components/ui/Badge.svelte'
   import type { PageData } from './$types'
 
@@ -9,6 +11,25 @@
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+  })
+
+  $effect(() => {
+    const supabase = createSupabaseBrowserClient()
+    const channel = supabase
+      .channel('dashboard-bookings')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'bookings',
+          filter: `shop_id=eq.${data.shopId}`,
+        },
+        () => { invalidate('app:dashboard') },
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
   })
 </script>
 
@@ -39,10 +60,10 @@
       <div class="attention__rows">
         {#each data.needsAttention as booking (booking.id)}
           <a href="/admin/bookings/{booking.id}" class="booking-row booking-row--attention">
-            <span class="booking-row__time">{booking.time}</span>
+            <span class="booking-row__time">{booking.dateTime}</span>
             <span class="booking-row__name">{booking.customerName}</span>
             <span class="booking-row__service">{booking.serviceName}</span>
-            <Badge status={booking.status} />
+            <Badge status="pending" />
           </a>
         {/each}
       </div>
@@ -187,6 +208,7 @@
   .booking-row--attention {
     border-color: var(--color-pending-text);
     background: transparent;
+    grid-template-columns: 10rem 1fr 1fr auto;
   }
 
   .booking-row__time {

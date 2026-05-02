@@ -35,31 +35,31 @@
 - [x] 4.1 Admin dashboard (today's bookings, quick stats, needs-attention alerts)
 - [x] 4.2 Bookings list page (filterable by status, date, barber; contact reveal toggle; current-booking highlight; view button)
 - [x] 4.3 Single booking detail page (customer, appointment, service, notes, other bookings panel)
-- [ ] 4.4 Accept / reject actions with status update
-- [ ] 4.5 Mark as completed / no-show
-- [ ] 4.6 Internal notes on bookings
+- [x] 4.4 Accept / reject actions with status update
+- [x] 4.5 Mark as completed / no-show
+- [x] 4.6 Internal notes on bookings (collapsible, hidden by default)
 
 ---
 
 ## 5 — Customer Portal
 - [x] 5.1 Login & register pages
-- [ ] 5.2 Customer dashboard (upcoming bookings)
-- [ ] 5.3 Booking detail page (view, cancel, reschedule)
-- [ ] 5.4 Booking history & review submission
-- [ ] 5.5 Account settings (profile, notification preferences)
+- [x] 5.2 Customer dashboard (upcoming bookings)
+- [x] 5.3 Booking detail page (view, cancel, reschedule)
+- [x] 5.4 Booking history & review submission
+- [x] 5.5 Account settings (profile, notification preferences)
 
 ---
 
 ## 6 — Services & Schedule Management
-- [ ] 6.1 Service CRUD (name, price, duration, display order)
+- [ ] 6.1 Service CRUD (name, price, duration, display order, deposit amount)
 - [ ] 6.2 Availability rules (per barber, per day of week)
-- [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off)
-- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle)
+- [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off, one off days added)
+- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
 
 ---
 
-## 7 — Brevo Notifications
-- [ ] 7.1 Configure Brevo account, API key, sender domain
+## 7 — Resend Notifications
+- [ ] 7.1 Configure Resend account, API key, sender domain
 - [ ] 7.2 Build all email templates (confirmation, accepted, rejected, cancelled, reminder, review invite, waitlist)
 - [ ] 7.3 Wire templates to Edge Function triggers
 - [ ] 7.4 24hr reminder cron job

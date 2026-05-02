@@ -20,14 +20,15 @@ function getLondonDayBounds(): { dayStart: string; dayEnd: string } {
   }
 }
 
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, depends }) => {
+  depends('app:dashboard')
   const { role } = await parent()
   const shopId = role.shop_id
 
   const admin = createSupabaseAdminClient()
   const { dayStart, dayEnd } = getLondonDayBounds()
 
-  const [shopResult, bookingsResult] = await Promise.all([
+  const [shopResult, bookingsResult, pendingResult] = await Promise.all([
     admin.from('shops').select('brand_colour').eq('id', shopId).single(),
     admin
       .from('bookings')
@@ -35,7 +36,6 @@ export const load: PageServerLoad = async ({ parent }) => {
         id,
         start_at,
         status,
-        created_at,
         customers ( first_name, last_name ),
         services ( name )
       `)
@@ -43,12 +43,25 @@ export const load: PageServerLoad = async ({ parent }) => {
       .gte('start_at', dayStart)
       .lte('start_at', dayEnd)
       .order('start_at'),
+    admin
+      .from('bookings')
+      .select(`
+        id,
+        start_at,
+        created_at,
+        customers ( first_name, last_name ),
+        services ( name )
+      `)
+      .eq('shop_id', shopId)
+      .eq('status', 'pending')
+      .gte('start_at', new Date().toISOString())
+      .order('start_at'),
   ])
 
   if (bookingsResult.error) throw bookingsResult.error
+  if (pendingResult.error) throw pendingResult.error
 
   const raw = bookingsResult.data
-  const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString()
 
   const bookings = raw.map(b => ({
     id: b.id,
@@ -60,10 +73,27 @@ export const load: PageServerLoad = async ({ parent }) => {
     status: b.status as 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed' | 'no_show',
     customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
     serviceName: b.services?.name ?? '',
-    createdAt: b.created_at,
   }))
 
+  const needsAttention = (pendingResult.data ?? [])
+    .map(b => ({
+      id: b.id,
+      dateTime: `${new Date(b.start_at).toLocaleDateString('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+      })} · ${new Date(b.start_at).toLocaleTimeString('en-GB', {
+        timeZone: 'Europe/London',
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`,
+      customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
+      serviceName: b.services?.name ?? '',
+    }))
+
   return {
+    shopId,
     bookings,
     stats: {
       total:     raw.length,
@@ -71,7 +101,7 @@ export const load: PageServerLoad = async ({ parent }) => {
       accepted:  raw.filter(b => b.status === 'accepted').length,
       completed: raw.filter(b => b.status === 'completed').length,
     },
-    needsAttention: bookings.filter(b => b.status === 'pending' && (b.createdAt ?? '') < twoHoursAgo),
+    needsAttention,
     brandColour: shopResult.data?.brand_colour ?? null,
   }
 }

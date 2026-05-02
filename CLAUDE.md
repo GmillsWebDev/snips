@@ -309,6 +309,18 @@ Use Supabase's generated types where available. When querying with `.select()`, 
 
 ---
 
+## Deployment
+
+This project is hosted on **Netlify** — not Vercel. Apply this everywhere hosting choices are relevant.
+
+- SvelteKit adapter: **`@sveltejs/adapter-netlify`** — never `adapter-vercel` or `adapter-auto`
+- Config lives in `netlify.toml` at the repo root (publish dir, build command, edge function settings)
+- Environment variables are set in the Netlify dashboard (or `netlify.toml` for non-secret values)
+- Netlify serves SvelteKit SSR via Netlify Functions (Node) — no edge runtime unless explicitly opted in
+- Do not generate or reference any Vercel config (`vercel.json`, `VERCEL_*` env vars, Vercel-specific APIs)
+
+---
+
 ## Reference Docs
 
 These files contain the full project plan and build checklist — read them when you need broader context on architecture, the DB schema, the booking state machine, or what phase of the build we're in:
