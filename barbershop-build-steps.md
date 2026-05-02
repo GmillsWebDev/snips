@@ -43,9 +43,9 @@
 
 ## 5 — Customer Portal
 - [x] 5.1 Login & register pages
-- [ ] 5.2 Customer dashboard (upcoming bookings)
-- [ ] 5.3 Booking detail page (view, cancel, reschedule)
-- [ ] 5.4 Booking history & review submission
+- [x] 5.2 Customer dashboard (upcoming bookings)
+- [x] 5.3 Booking detail page (view, cancel, reschedule)
+- [x] 5.4 Booking history & review submission
 - [ ] 5.5 Account settings (profile, notification preferences)
 
 ---

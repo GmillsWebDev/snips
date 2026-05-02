@@ -38,6 +38,7 @@
 <div class="dashboard">
   <header class="dashboard__header">
     <h1>Your Bookings</h1>
+    <a href="/account" class="dashboard__account-link">Account settings</a>
   </header>
 
   <div class="tab-group" role="tablist">
@@ -145,9 +146,27 @@
     gap: var(--space-6);
   }
 
+  .dashboard__header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
   .dashboard__header h1 {
     font-size: var(--font-size-2xl);
     font-weight: 700;
+  }
+
+  .dashboard__account-link {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    text-decoration: none;
+    transition: var(--transition);
+    white-space: nowrap;
+
+    &:hover { color: var(--color-text); }
   }
 
   /* ── Tabs ─────────────────────────────────────────────────── */

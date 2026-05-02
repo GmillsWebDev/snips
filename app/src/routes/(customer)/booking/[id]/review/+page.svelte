@@ -21,7 +21,7 @@
 
   <div class="review-card">
     <div class="review-card__header">
-      <h1>Review your appointment</h1>
+      <h1>How was it?</h1>
       <p class="review-card__subtitle">{data.booking.serviceName}</p>
     </div>
 
