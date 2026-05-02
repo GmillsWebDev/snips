@@ -207,6 +207,21 @@ Use BEM (Block Element Modifier) naming for component classes:
 
 ## Supabase Conventions
 
+### Shared Server Utilities
+
+Reusable server-only helpers live in `$lib/server/`. Use these instead of inlining the same logic across route files:
+
+| File | Purpose |
+|---|---|
+| `resolveCustomer.ts` | Find-or-create a customer row by `shop_id` + `email`. Patches `user_id` onto an existing row when an auth account is present. Used in the booking creation flow. |
+| `resolveChair.ts` | Returns a chair id for a barber/shop: prefers the barber's assigned chair, falls back to any active shop chair. Returns `null` if none found. |
+| `getRole.ts` | Fetches the `user_roles` row for the current user — used in admin route guards. |
+
+**Customer lookup — two distinct patterns, do not conflate:**
+
+- **Booking creation** (`resolveCustomer`): scoped by `shop_id` + `email`. A customer can exist at multiple shops with the same email — the shop scope is intentional.
+- **Auth-linked page loads** (dashboard, booking detail, account): query by `user_id` first via `locals.supabase`, then fall back to `email` via the admin client, patching `user_id` on the row for future lookups. No `shop_id` constraint — these are finding the logged-in user's own record.
+
 ### Client Usage
 Always use the correct client for the context:
 

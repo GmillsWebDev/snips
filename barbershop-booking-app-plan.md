@@ -126,7 +126,8 @@ reason      text               -- "Holiday", "Lunch", etc.
 id             uuid PK
 user_id        uuid → auth.users   -- nullable for guests
 shop_id        uuid → shops
-name           text
+first_name     text
+last_name      text
 email          text
 phone          text
 is_guest       boolean DEFAULT false
@@ -134,6 +135,20 @@ loyalty_points int DEFAULT 0
 notes          text               -- owner-visible notes
 created_at     timestamptz
 ```
+
+### `customer_notification_preferences`
+```sql
+customer_id             uuid PK → customers (cascade delete)
+email_confirmations     boolean DEFAULT true
+email_reminders         boolean DEFAULT true
+whatsapp_confirmations  boolean DEFAULT false
+whatsapp_reminders      boolean DEFAULT false
+sms_confirmations       boolean DEFAULT false
+sms_reminders           boolean DEFAULT false
+updated_at              timestamptz
+```
+
+> Separate table (not columns on `customers`) to keep the core record clean and allow new channels to be added without widening the customers table. Row is upserted on first save from account settings; defaults apply until then.
 
 ### `bookings`
 ```sql
@@ -259,10 +274,10 @@ src/routes/
 │   └── reviews/[slug]/            Public reviews page
 │
 ├── (customer)/                    Authed customers
-│   ├── dashboard/                 My upcoming bookings
-│   ├── bookings/[id]/             Booking detail + cancel/reschedule
-│   ├── history/                   Past bookings + leave review
-│   └── account/                   Profile, notification prefs
+│   ├── dashboard/                 Upcoming + past bookings (tabbed), account settings link
+│   ├── booking/[id]/              Booking detail + cancel action
+│   ├── booking/[id]/review/       Review submission form (completed bookings only)
+│   └── account/                   Profile (name, phone), notification prefs (email/whatsapp/sms)
 │
 ├── (admin)/                       Owner + staff
 │   ├── dashboard/                 Today's bookings, quick stats
@@ -323,6 +338,7 @@ src/routes/
 |---|---|---|---|
 | `bookings` | Read/create own | Read assigned | Full access |
 | `customers` | Read/edit own | Read | Full access |
+| `customer_notification_preferences` | Read/write own | — | Read (via shop) |
 | `services` | Read active | Read | Full CRUD |
 | `barbers` | Read active | Read own | Full CRUD |
 | `reviews` | Read all, write own | Read | Read + hide |
@@ -455,6 +471,9 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Price storage | Integer pence (e.g. 1500 = £15.00) | Avoids floating point issues |
 | Slug | Per-shop unique slug for public booking URL | Allows white-label feel without custom domains |
 | Plan gating | Single `plan_type` field on `shops` | Simple, no extra tables, easy to extend |
+| Notification preferences | Separate `customer_notification_preferences` table (not columns on `customers`) | Keeps customers table clean; adding new channels (WhatsApp, SMS) is a targeted migration rather than widening a core table. WhatsApp and SMS columns exist from the start, defaulting to false, ready to activate when those integrations are built. |
+| Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
+| Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
 
 ---
 
