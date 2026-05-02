@@ -275,6 +275,33 @@
       </section>
     {/if}
 
+    <!-- ── Review (completed bookings only) ──────────── -->
+    {#if data.booking.status === 'completed'}
+      <section class="card card--full">
+        <h2 class="card__title">Review</h2>
+
+        {#if data.review}
+          <div class="review">
+            <div class="review__stars" aria-label="Rating: {data.review.rating} out of 5">
+              {#each [1, 2, 3, 4, 5] as star}
+                <span class="review__star" class:review__star--filled={star <= data.review.rating}>★</span>
+              {/each}
+            </div>
+
+            {#if data.review.comment}
+              <p class="review__comment">{data.review.comment}</p>
+            {:else}
+              <p class="review__no-comment">No comment left</p>
+            {/if}
+
+            <p class="review__date">Submitted {data.review.createdAt}</p>
+          </div>
+        {:else}
+          <p class="review__empty">No review left for this booking.</p>
+        {/if}
+      </section>
+    {/if}
+
   </div>
 
   
@@ -703,6 +730,51 @@
     0%   { opacity: 1; }
     60%  { opacity: 1; }
     100% { opacity: 0; }
+  }
+
+  /* ── Review ──────────────────────────────────────── */
+
+  .review {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .review__stars {
+    display: flex;
+    gap: var(--space-1);
+  }
+
+  .review__star {
+    font-size: 1.5rem;
+    line-height: 1;
+    color: var(--color-border);
+  }
+
+  .review__star--filled {
+    color: #f59e0b;
+  }
+
+  .review__comment {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    line-height: 1.6;
+  }
+
+  .review__no-comment {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-subtle);
+    font-style: italic;
+  }
+
+  .review__date {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .review__empty {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
   }
 
   /* ── ─────────────────────────────────────────────── */

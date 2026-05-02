@@ -126,7 +126,9 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   const relatedSelect = 'id, start_at, status, services ( name )'
 
-  const [previousResult, upcomingResult] = await Promise.all([
+  type ReviewResult = { rating: number; comment: string | null; created_at: string } | null
+
+  const [previousResult, upcomingResult, reviewResult] = await Promise.all([
     admin
       .from('bookings')
       .select(relatedSelect)
@@ -145,6 +147,11 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       .gt('start_at', data.start_at)
       .order('start_at', { ascending: true })
       .limit(1),
+    admin
+      .from('reviews')
+      .select('rating, comment, created_at')
+      .eq('booking_id', params.id)
+      .maybeSingle(),
   ])
 
   function toRelated(b: { id: string; start_at: string; status: string; services: { name: string } | null }): RelatedBooking {
@@ -156,6 +163,22 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       status: b.status as BookingStatus,
     }
   }
+
+  if (reviewResult.error) error(500, 'Failed to load review')
+
+  const reviewData = reviewResult.data as ReviewResult
+  const review = reviewData
+    ? {
+        rating: reviewData.rating,
+        comment: reviewData.comment ?? null,
+        createdAt: new Date(reviewData.created_at).toLocaleDateString('en-GB', {
+          timeZone: TIMEZONE,
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        }),
+      }
+    : null
 
   const relatedBookings = {
     previous: (previousResult.data ?? []).map(toRelated),
@@ -188,7 +211,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     chairLabel: data.chairs?.label ?? '',
   }
 
-  return { booking, relatedBookings, backHref }
+  return { booking, relatedBookings, backHref, review }
 }
 
 export const actions: Actions = {

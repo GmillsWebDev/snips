@@ -129,10 +129,10 @@
         <thead>
           <tr>
             <th>Customer</th>
-            <th>Service</th>
-            <th>Barber</th>
             <th>Date</th>
             <th>Time</th>
+            <th>Service</th>
+            <th>Barber</th>
             <th>Status</th>
             <th class="bookings-table__price-col">Price</th>
             <th></th>
@@ -164,11 +164,11 @@
                     {/if}
                   </div>
                 {/if}
-              </td>
-              <td>{booking.serviceName}</td>
-              <td>{booking.barberName}</td>
+              </td>              
               <td class="bookings-table__date">{booking.date}</td>
               <td class="bookings-table__time">{booking.time}</td>
+              <td>{booking.serviceName}</td>
+              <td>{booking.barberName}</td>
               <td><Badge status={booking.status} /></td>
               <td class="bookings-table__price">{formatPrice(booking.pricePence)}</td>
               <td class="bookings-table__action">
