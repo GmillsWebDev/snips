@@ -58,8 +58,8 @@
 
 ---
 
-## 7 — Brevo Notifications
-- [ ] 7.1 Configure Brevo account, API key, sender domain
+## 7 — Resend Notifications
+- [ ] 7.1 Configure Resend account, API key, sender domain
 - [ ] 7.2 Build all email templates (confirmation, accepted, rejected, cancelled, reminder, review invite, waitlist)
 - [ ] 7.3 Wire templates to Edge Function triggers
 - [ ] 7.4 24hr reminder cron job
