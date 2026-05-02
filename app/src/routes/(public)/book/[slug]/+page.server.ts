@@ -1,6 +1,8 @@
 import { error, fail, redirect } from '@sveltejs/kit'
 import type { PageServerLoad, Actions } from './$types'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
+import { resolveCustomer } from '$lib/server/resolveCustomer'
+import { resolveChair } from '$lib/server/resolveChair'
 
 export const load: PageServerLoad = async ({ params, locals }) => {
   const { data: shop, error: shopError } = await locals.supabase
@@ -90,28 +92,8 @@ export const actions: Actions = {
       .single()
     if (barberErr || !barber) return fail(400, { error: 'No barber available.' })
 
-    const { data: preferredChair } = await supabase
-      .from('chairs')
-      .select('id')
-      .eq('barber_id', barber.id)
-      .eq('is_active', true)
-      .limit(1)
-      .single()
-
-    let chair_id: string
-    if (preferredChair) {
-      chair_id = preferredChair.id
-    } else {
-      const { data: anyChair, error: chairErr } = await supabase
-        .from('chairs')
-        .select('id')
-        .eq('shop_id', shop.id)
-        .eq('is_active', true)
-        .limit(1)
-        .single()
-      if (chairErr || !anyChair) return fail(400, { error: 'No chair available.' })
-      chair_id = anyChair.id
-    }
+    const chair_id = await resolveChair(supabase, barber.id, shop.id)
+    if (!chair_id) return fail(400, { error: 'No chair available.' })
 
     let resolved_customer_id: string
 
@@ -119,32 +101,17 @@ export const actions: Actions = {
       resolved_customer_id = customer_id
     } else {
       const user_id = !is_guest ? (await locals.safeGetSession()).user?.id ?? null : null
-
-      const { data: existing } = await admin
-        .from('customers')
-        .select('id')
-        .eq('shop_id', shop.id)
-        .eq('email', email)
-        .maybeSingle()
-
-      if (existing) {
-        // Link auth account to this customer row if not already linked
-        if (user_id) {
-          await admin
-            .from('customers')
-            .update({ user_id, is_guest: false })
-            .eq('id', existing.id)
-        }
-        resolved_customer_id = existing.id
-      } else {
-        const { data: newCustomer, error: custErr } = await admin
-          .from('customers')
-          .insert({ shop_id: shop.id, first_name, last_name, email, phone, is_guest: !user_id, user_id })
-          .select('id')
-          .single()
-        if (custErr || !newCustomer) return fail(500, { error: 'Could not save your details. Please try again.' })
-        resolved_customer_id = newCustomer.id
-      }
+      const id = await resolveCustomer(admin, {
+        shopId: shop.id,
+        email,
+        firstName: first_name,
+        lastName: last_name,
+        phone,
+        isGuest: !user_id,
+        userId: user_id,
+      })
+      if (!id) return fail(500, { error: 'Could not save your details. Please try again.' })
+      resolved_customer_id = id
     }
 
     const { data: booking, error: bookingErr } = await admin
