@@ -81,6 +81,10 @@
 
   /* Transitions */
   --transition: 150ms ease;
+
+  /* Widths */
+  --max-width-container: 1600px;
+  --width-container: calc(100% - 4rem);
 }
 
 /* ===========================
@@ -135,8 +139,8 @@ h3 { font-size: var(--font-size-xl);  font-weight: 600; line-height: 1.4; }
 /* Global Styles */
 
 .container{
-	max-width: 1600px;
-	width: calc(100% - 4rem);
+	max-width: var(--max-width-container);
+	width: var(--width-container);
 	margin: 4rem auto;
 }
 
