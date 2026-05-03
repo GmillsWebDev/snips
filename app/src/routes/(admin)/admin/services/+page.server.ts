@@ -1,4 +1,4 @@
-import { fail } from '@sveltejs/kit'
+import { fail, redirect } from '@sveltejs/kit'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
 import { getRole } from '$lib/server/getRole'
 import type { PageServerLoad, Actions } from './$types'
@@ -10,21 +10,30 @@ export type Service = {
   price_pence: number
   display_order: number
   is_active: boolean
+  is_deleted: boolean
+  deleted_at: string | null
 }
 
-export const load: PageServerLoad = async ({ parent }) => {
+export const load: PageServerLoad = async ({ parent, url }) => {
   const { role } = await parent()
   const admin = createSupabaseAdminClient()
+  const showDeleted = url.searchParams.get('showDeleted') === 'true'
 
-  const { data, error } = await admin
+  let query = admin
     .from('services')
-    .select('id, name, duration_minutes, price_pence, display_order, is_active')
+    .select('id, name, duration_minutes, price_pence, display_order, is_active, is_deleted, deleted_at')
     .eq('shop_id', role.shop_id)
     .order('display_order', { ascending: true })
 
+  if (!showDeleted) {
+    query = query.eq('is_deleted', false)
+  }
+
+  const { data, error } = await query
+
   if (error) throw error
 
-  return { services: (data ?? []) as Service[] }
+  return { services: (data ?? []) as Service[], showDeleted }
 }
 
 export const actions: Actions = {
@@ -45,12 +54,12 @@ export const actions: Actions = {
 
     const admin = createSupabaseAdminClient()
 
-    // Fetch the target service — .eq('shop_id') ensures it belongs to this shop
     const { data: current, error: currentErr } = await admin
       .from('services')
       .select('id, display_order')
       .eq('id', serviceId)
       .eq('shop_id', role.shop_id)
+      .eq('is_deleted', false)
       .single()
 
     if (currentErr || !current) return fail(404, { reorderError: 'Service not found' })
@@ -59,6 +68,7 @@ export const actions: Actions = {
       .from('services')
       .select('id, display_order')
       .eq('shop_id', role.shop_id)
+      .eq('is_deleted', false)
 
     const { data: neighbor, error: neighborErr } = direction === 'up'
       ? await neighborBase
@@ -99,18 +109,17 @@ export const actions: Actions = {
 
     const admin = createSupabaseAdminClient()
 
-    // Verify service belongs to this shop before proceeding
     const { data: service, error: serviceErr } = await admin
       .from('services')
       .select('id')
       .eq('id', serviceId)
       .eq('shop_id', role.shop_id)
+      .eq('is_deleted', false)
       .maybeSingle()
 
     if (serviceErr) return fail(500, { deleteError: 'Failed to verify service.' })
     if (!service) return fail(404, { deleteError: 'Service not found.' })
 
-    // Block deletion if any upcoming active bookings use this service
     const { data: upcoming, error: bookingsErr } = await admin
       .from('bookings')
       .select('id')
@@ -130,12 +139,48 @@ export const actions: Actions = {
 
     const { error: deleteErr } = await admin
       .from('services')
-      .delete()
+      .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq('id', serviceId)
       .eq('shop_id', role.shop_id)
 
     if (deleteErr) return fail(500, { deleteError: 'Failed to delete service.' })
 
     return { deleted: true }
+  },
+
+  restore: async ({ request, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(403, { restoreError: 'Not authenticated' })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail(403, { restoreError: 'Not authorized' })
+
+    const formData = await request.formData()
+    const serviceId = formData.get('serviceId')
+
+    if (typeof serviceId !== 'string') return fail(400, { restoreError: 'Invalid request' })
+
+    const admin = createSupabaseAdminClient()
+
+    const { data: service, error: serviceErr } = await admin
+      .from('services')
+      .select('id')
+      .eq('id', serviceId)
+      .eq('shop_id', role.shop_id)
+      .eq('is_deleted', true)
+      .maybeSingle()
+
+    if (serviceErr) return fail(500, { restoreError: 'Failed to verify service.' })
+    if (!service) return fail(404, { restoreError: 'Service not found.' })
+
+    const { error: restoreErr } = await admin
+      .from('services')
+      .update({ is_deleted: false, deleted_at: null })
+      .eq('id', serviceId)
+      .eq('shop_id', role.shop_id)
+
+    if (restoreErr) return fail(500, { restoreError: 'Failed to restore service.' })
+
+    redirect(303, '/admin/services?showDeleted=true')
   },
 }

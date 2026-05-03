@@ -9,12 +9,12 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 
   const { data, error: fetchErr } = await admin
     .from('services')
-    .select('id, name, description, duration_minutes, price_pence, display_order, is_active')
+    .select('id, name, description, duration_minutes, price_pence, display_order, is_active, is_deleted')
     .eq('id', params.id)
     .eq('shop_id', role.shop_id)
     .single()
 
-  if (fetchErr || !data) error(404, 'Service not found')
+  if (fetchErr || !data || data.is_deleted) error(404, 'Service not found')
 
   return {
     service: {

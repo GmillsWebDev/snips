@@ -23,6 +23,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
       .select('id, name, description, duration_minutes, price_pence')
       .eq('shop_id', shop.id)
       .eq('is_active', true)
+      .eq('is_deleted', false)
       .order('display_order'),
     locals.supabase
       .from('barbers')
@@ -76,6 +77,7 @@ export const actions: Actions = {
       .eq('id', service_id)
       .eq('shop_id', shop.id)
       .eq('is_active', true)
+      .eq('is_deleted', false)
       .single()
     if (serviceErr || !service) return fail(400, { error: 'Service not found.' })
 

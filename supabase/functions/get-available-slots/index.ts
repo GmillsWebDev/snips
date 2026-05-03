@@ -38,6 +38,7 @@ Deno.serve(async (req) => {
       .from("services")
       .select("duration_minutes")
       .eq("id", service_id)
+      .eq("is_deleted", false)
       .single();
 
     if (!service) return json({ error: "Service not found" }, 404);

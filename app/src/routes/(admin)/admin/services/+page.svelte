@@ -33,6 +33,11 @@
   function formatPrice(pence: number): string {
     return `£${(pence / 100).toFixed(2)}`
   }
+
+  function formatDeletedAt(iso: string | null): string {
+    if (!iso) return 'Deleted'
+    return `Deleted ${new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`
+  }
 </script>
 
 <svelte:head>
@@ -42,13 +47,21 @@
 <div class="services-page">
   <header class="services-page__header">
     <h1>Services</h1>
-    <a href="/admin/services/new" class="add-btn">Add service</a>
+    <div class="services-page__actions">
+      <a
+        href={data.showDeleted ? '/admin/services' : '/admin/services?showDeleted=true'}
+        class="toggle-deleted"
+      >{data.showDeleted ? 'Hide deleted' : 'Show deleted'}</a>
+      <a href="/admin/services/new" class="add-btn">Add service</a>
+    </div>
   </header>
 
   {#if data.services.length === 0}
     <div class="empty-state">
-      <p class="empty-state__message">No services yet.</p>
-      <p class="empty-state__hint">Add your first service to start taking bookings.</p>
+      <p class="empty-state__message">{data.showDeleted ? 'No deleted services.' : 'No services yet.'}</p>
+      {#if !data.showDeleted}
+        <p class="empty-state__hint">Add your first service to start taking bookings.</p>
+      {/if}
     </div>
   {:else}
     <div class="table-wrap">
@@ -65,60 +78,81 @@
         </thead>
         <tbody>
           {#each data.services as service, index (service.id)}
-            <tr>
+            <tr class:services-table__row--deleted={service.is_deleted}>
               <td class="services-table__order-col">
-                <div class="reorder">
-                  <form
-                    method="post"
-                    action="?/reorder"
-                    use:enhance={() => {
-                      reordering = `${service.id}-up`
-                      return async ({ update }) => { await update(); reordering = null }
-                    }}
-                  >
-                    <input type="hidden" name="serviceId" value={service.id} />
-                    <input type="hidden" name="direction" value="up" />
-                    <button
-                      type="submit"
-                      class="reorder-btn"
-                      disabled={index === 0 || reordering !== null}
-                      aria-label="Move up"
-                    >↑</button>
-                  </form>
-                  <form
-                    method="post"
-                    action="?/reorder"
-                    use:enhance={() => {
-                      reordering = `${service.id}-down`
-                      return async ({ update }) => { await update(); reordering = null }
-                    }}
-                  >
-                    <input type="hidden" name="serviceId" value={service.id} />
-                    <input type="hidden" name="direction" value="down" />
-                    <button
-                      type="submit"
-                      class="reorder-btn"
-                      disabled={index === data.services.length - 1 || reordering !== null}
-                      aria-label="Move down"
-                    >↓</button>
-                  </form>
-                </div>
+                {#if !service.is_deleted}
+                  <div class="reorder">
+                    <form
+                      method="post"
+                      action="?/reorder"
+                      use:enhance={() => {
+                        reordering = `${service.id}-up`
+                        return async ({ update }) => { await update(); reordering = null }
+                      }}
+                    >
+                      <input type="hidden" name="serviceId" value={service.id} />
+                      <input type="hidden" name="direction" value="up" />
+                      <button
+                        type="submit"
+                        class="reorder-btn"
+                        disabled={index === 0 || reordering !== null}
+                        aria-label="Move up"
+                      >↑</button>
+                    </form>
+                    <form
+                      method="post"
+                      action="?/reorder"
+                      use:enhance={() => {
+                        reordering = `${service.id}-down`
+                        return async ({ update }) => { await update(); reordering = null }
+                      }}
+                    >
+                      <input type="hidden" name="serviceId" value={service.id} />
+                      <input type="hidden" name="direction" value="down" />
+                      <button
+                        type="submit"
+                        class="reorder-btn"
+                        disabled={index === data.services.length - 1 || reordering !== null}
+                        aria-label="Move down"
+                      >↓</button>
+                    </form>
+                  </div>
+                {/if}
               </td>
               <td class="services-table__name">{service.name}</td>
               <td class="services-table__meta">{service.duration_minutes} min</td>
               <td class="services-table__meta services-table__price">{formatPrice(service.price_pence)}</td>
               <td>
-                <span class="status-badge status-badge--{service.is_active ? 'active' : 'inactive'}">
-                  {service.is_active ? 'Active' : 'Inactive'}
-                </span>
+                {#if service.is_deleted}
+                  <span class="status-badge status-badge--deleted">
+                    {formatDeletedAt(service.deleted_at)}
+                  </span>
+                {:else}
+                  <span class="status-badge status-badge--{service.is_active ? 'active' : 'inactive'}">
+                    {service.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                {/if}
               </td>
               <td class="services-table__actions">
-                <a href="/admin/services/{service.id}/edit" class="action-btn">Edit</a>
-                <button
-                  type="button"
-                  class="action-btn action-btn--danger"
-                  onclick={() => deleteTarget = { id: service.id, name: service.name, price_pence: service.price_pence }}
-                >Delete</button>
+                {#if service.is_deleted}
+                  <form
+                    method="post"
+                    action="?/restore"
+                    use:enhance={() => {
+                      return async ({ update }) => { await update() }
+                    }}
+                  >
+                    <input type="hidden" name="serviceId" value={service.id} />
+                    <button type="submit" class="action-btn">Restore</button>
+                  </form>
+                {:else}
+                  <a href="/admin/services/{service.id}/edit" class="action-btn">Edit</a>
+                  <button
+                    type="button"
+                    class="action-btn action-btn--danger"
+                    onclick={() => deleteTarget = { id: service.id, name: service.name, price_pence: service.price_pence }}
+                  >Delete</button>
+                {/if}
               </td>
             </tr>
           {/each}
@@ -143,7 +177,7 @@
         </p>
         <p class="delete-confirm__instruction">
           To confirm this deletion, please type <code class="delete-confirm__example">{expectedConfirm}</code> below:
-          
+
         </p>
         <form
           method="post"
@@ -224,20 +258,22 @@
     font-weight: 700;
   }
 
-  /* .add-btn {
-    padding: var(--space-2) var(--space-5);
-    background: var(--color-primary);
-    color: var(--color-on-primary);
-    border-radius: var(--radius-md);
+  .services-page__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .toggle-deleted {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
     text-decoration: none;
-    font-size: var(--font-size-sm);
-    font-weight: 500;
     transition: var(--transition);
 
     &:hover {
-      background: var(--color-primary-hover);
+      color: var(--color-text);
     }
-  } */
+  }
 
   /* ── Empty state ─────────────────────────────────── */
 
@@ -309,6 +345,10 @@
     &:hover {
       background: var(--color-surface-hover);
     }
+  }
+
+  .services-table__row--deleted td {
+    opacity: 0.5;
   }
 
   /* ── Order / reorder ─────────────────────────────── */
@@ -385,6 +425,11 @@
   .status-badge--inactive {
     background: var(--color-cancelled-bg);
     color: var(--color-cancelled-text);
+  }
+
+  .status-badge--deleted {
+    background: var(--color-rejected-bg);
+    color: var(--color-rejected-text);
   }
 
   /* ── Actions column ──────────────────────────────── */
