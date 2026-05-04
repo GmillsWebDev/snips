@@ -1,42 +1,56 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
+  import type { ActionResult } from '@sveltejs/kit'
   import type { PageData } from './$types'
   import type { AvailabilityRule } from './+page.server'
 
   let { data }: { data: PageData } = $props()
 
   const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-  // Display Monday first (1–6) then Sunday (0)
+  // Monday first (1–6) then Sunday (0)
   const DISPLAY_ORDER = [1, 2, 3, 4, 5, 6, 0]
 
   type DayInfo = {
     dow: number
     name: string
     isWorking: boolean
-    shifts: AvailabilityRule[]
+    shift1: AvailabilityRule | null
+    shift2: AvailabilityRule | null
+    hasSplit: boolean
   }
 
   const days: DayInfo[] = $derived(
     DISPLAY_ORDER.map((dow) => {
       const dayRules = data.rules.filter((r) => r.day_of_week === dow)
+      const shift1 = dayRules.find((r) => r.shift_number === 1) ?? null
+      const shift2 = dayRules.find((r) => r.shift_number === 2) ?? null
       return {
         dow,
         name: DAY_NAMES[dow],
         isWorking: dayRules.some((r) => r.is_working),
-        shifts: dayRules.filter((r) => r.is_working),
+        shift1,
+        shift2,
+        hasSplit: shift2 !== null,
       }
     }),
   )
 
+  // Keyed by `${dow}-${shiftNumber}`
+  let timeErrors = $state<Record<string, string>>({})
   let warning = $state<{ dow: number; count: number } | null>(null)
   let submitting = $state<number | null>(null)
 
-  function formatTime(time: string): string {
-    const [h, m] = time.split(':')
-    const hour = parseInt(h)
-    const suffix = hour >= 12 ? 'pm' : 'am'
-    const display = hour % 12 || 12
-    return m === '00' ? `${display}${suffix}` : `${display}:${m}${suffix}`
+  function makeTimesEnhance(dow: number, shiftNum: number) {
+    return () => {
+      const key = `${dow}-${shiftNum}`
+      return async ({ result }: { result: ActionResult }) => {
+        if (result.type === 'failure') {
+          timeErrors[key] = ((result.data as Record<string, unknown>)?.message as string) ?? 'Invalid times'
+        } else {
+          delete timeErrors[key]
+        }
+      }
+    }
   }
 </script>
 
@@ -53,19 +67,44 @@
   <div class="schedule-grid">
     {#each days as day (day.dow)}
       <div class="schedule-day" class:schedule-day--off={!day.isWorking}>
-        <div class="schedule-day__row">
+
+        <!-- Top row: name · (inline times or "Day off") · day toggle -->
+        <div class="schedule-day__header">
           <span class="schedule-day__name">{day.name}</span>
 
-          <span class="schedule-day__info">
-            {#if day.isWorking}
-              {#each day.shifts as shift, i}
-                {#if i > 0}<span class="schedule-day__sep"> · </span>{/if}
-                {formatTime(shift.start_time)}–{formatTime(shift.end_time)}
-              {/each}
-            {:else}
+          <div class="schedule-day__center">
+            {#if day.isWorking && !day.hasSplit && day.shift1}
+              <form
+                method="POST"
+                action="?/updateTimes"
+                class="times-form"
+                onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
+                use:enhance={makeTimesEnhance(day.dow, 1)}
+              >
+                <input type="hidden" name="dayOfWeek" value={day.dow} />
+                <input type="hidden" name="shiftNumber" value="1" />
+                <div class="times-row">
+                  <input
+                    class="time-input"
+                    type="time"
+                    name="startTime"
+                    value={day.shift1.start_time}
+                    oninput={() => delete timeErrors[`${day.dow}-1`]}
+                  />
+                  <span class="times-sep">→</span>
+                  <input
+                    class="time-input"
+                    type="time"
+                    name="endTime"
+                    value={day.shift1.end_time}
+                    oninput={() => delete timeErrors[`${day.dow}-1`]}
+                  />
+                </div>
+              </form>
+            {:else if !day.isWorking}
               <span class="schedule-day__off-label">Day off</span>
             {/if}
-          </span>
+          </div>
 
           <form
             method="POST"
@@ -74,9 +113,7 @@
               submitting = day.dow
               return async ({ result, update }) => {
                 submitting = null
-                const d = result.type === 'failure'
-                  ? (result.data as Record<string, unknown>)
-                  : null
+                const d = result.type === 'failure' ? (result.data as Record<string, unknown>) : null
                 if (d?.warning) {
                   warning = { dow: day.dow, count: d.count as number }
                 } else {
@@ -101,6 +138,140 @@
           </form>
         </div>
 
+        <!-- Single-shift time error (below header, above split row) -->
+        {#if day.isWorking && !day.hasSplit && timeErrors[`${day.dow}-1`]}
+          <p class="time-error time-error--top">{timeErrors[`${day.dow}-1`]}</p>
+        {/if}
+
+        <!-- Split shift time rows -->
+        {#if day.isWorking && day.hasSplit}
+          <div class="schedule-day__shifts">
+            {#if day.shift1}
+              <div class="schedule-day__shift">
+                <div class="schedule-day__shift-row">
+                  <span class="schedule-day__shift-label">Shift 1</span>
+                  <form
+                    method="POST"
+                    action="?/updateTimes"
+                    class="times-form"
+                    onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
+                    use:enhance={makeTimesEnhance(day.dow, 1)}
+                  >
+                    <input type="hidden" name="dayOfWeek" value={day.dow} />
+                    <input type="hidden" name="shiftNumber" value="1" />
+                    <div class="times-row">
+                      <input
+                        class="time-input"
+                        type="time"
+                        name="startTime"
+                        value={day.shift1.start_time}
+                        oninput={() => delete timeErrors[`${day.dow}-1`]}
+                      />
+                      <span class="times-sep">→</span>
+                      <input
+                        class="time-input"
+                        type="time"
+                        name="endTime"
+                        value={day.shift1.end_time}
+                        oninput={() => delete timeErrors[`${day.dow}-1`]}
+                      />
+                    </div>
+                  </form>
+                </div>
+                {#if timeErrors[`${day.dow}-1`]}
+                  <p class="time-error">{timeErrors[`${day.dow}-1`]}</p>
+                {/if}
+              </div>
+            {/if}
+            {#if day.shift2}
+              <div class="schedule-day__shift schedule-day__shift--second">
+                <div class="schedule-day__shift-row">
+                  <span class="schedule-day__shift-label">Second shift</span>
+                  <form
+                    method="POST"
+                    action="?/updateTimes"
+                    class="times-form"
+                    onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
+                    use:enhance={makeTimesEnhance(day.dow, 2)}
+                  >
+                    <input type="hidden" name="dayOfWeek" value={day.dow} />
+                    <input type="hidden" name="shiftNumber" value="2" />
+                    <div class="times-row">
+                      <input
+                        class="time-input"
+                        type="time"
+                        name="startTime"
+                        value={day.shift2.start_time}
+                        oninput={() => delete timeErrors[`${day.dow}-2`]}
+                      />
+                      <span class="times-sep">→</span>
+                      <input
+                        class="time-input"
+                        type="time"
+                        name="endTime"
+                        value={day.shift2.end_time}
+                        oninput={() => delete timeErrors[`${day.dow}-2`]}
+                      />
+                    </div>
+                  </form>
+                </div>
+                {#if timeErrors[`${day.dow}-2`]}
+                  <p class="time-error">{timeErrors[`${day.dow}-2`]}</p>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Split shift toggle -->
+        {#if day.isWorking}
+          <div class="schedule-day__split-row">
+            <span class="schedule-day__split-label">Split shift</span>
+            {#if day.hasSplit}
+              <form
+                method="POST"
+                action="?/disableSplitShift"
+                use:enhance={() => async ({ result, update }) => {
+                  if (result.type !== 'failure') await update()
+                }}
+              >
+                <input type="hidden" name="dayOfWeek" value={day.dow} />
+                <button
+                  type="submit"
+                  class="toggle toggle--on toggle--sm"
+                  aria-label="Disable split shift for {day.name}"
+                  onclick={(e) => {
+                    if (!confirm('Merging shifts will combine your two shifts into one. Continue?')) {
+                      e.preventDefault()
+                    }
+                  }}
+                >
+                  <span class="toggle__thumb"></span>
+                </button>
+              </form>
+            {:else}
+              <form
+                method="POST"
+                action="?/enableSplitShift"
+                use:enhance={() => async ({ result, update }) => {
+                  if (result.type !== 'failure') await update()
+                }}
+              >
+                <input type="hidden" name="dayOfWeek" value={day.dow} />
+                <button
+                  type="submit"
+                  class="toggle toggle--sm"
+                  aria-label="Enable split shift for {day.name}"
+                  disabled={!day.shift1}
+                >
+                  <span class="toggle__thumb"></span>
+                </button>
+              </form>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Day-off warning banner -->
         {#if warning?.dow === day.dow}
           <div class="schedule-day__warning">
             <p class="schedule-day__warning-text">
@@ -125,16 +296,13 @@
                   Confirm
                 </button>
               </form>
-              <button
-                type="button"
-                class="btn btn--ghost"
-                onclick={() => { warning = null }}
-              >
+              <button type="button" class="btn btn--ghost" onclick={() => { warning = null }}>
                 Cancel
               </button>
             </div>
           </div>
         {/if}
+
       </div>
     {/each}
   </div>
@@ -177,11 +345,12 @@
     overflow: hidden;
   }
 
-  .schedule-day__row {
+  /* Top row */
+  .schedule-day__header {
     display: flex;
     align-items: center;
-    gap: var(--space-4);
-    padding: var(--space-4) var(--space-5);
+    gap: var(--space-3);
+    padding: var(--space-4) var(--space-4);
   }
 
   .schedule-day__name {
@@ -196,17 +365,93 @@
     color: var(--color-text-muted);
   }
 
-  .schedule-day__info {
+  .schedule-day__center {
     flex: 1;
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    min-width: 0;
   }
 
   .schedule-day__off-label {
+    font-size: var(--font-size-sm);
     color: var(--color-text-subtle);
     font-style: italic;
   }
 
+  /* Time form and inputs */
+  .times-form {
+    width: 100%;
+  }
+
+  .times-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .time-input {
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-sans);
+
+    &:focus {
+      outline: 2px solid var(--color-primary);
+      outline-offset: 1px;
+      border-color: var(--color-primary);
+    }
+  }
+
+  .times-sep {
+    color: var(--color-text-subtle);
+    font-size: var(--font-size-sm);
+    flex-shrink: 0;
+  }
+
+  /* Split shift rows */
+  .schedule-day__shifts {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .schedule-day__shift {
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .schedule-day__shift--second {
+    border-top: 1px solid var(--color-border);
+  }
+
+  .schedule-day__shift-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .schedule-day__shift-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    width: 5.5rem;
+    flex-shrink: 0;
+  }
+
+  /* Split shift toggle row */
+  .schedule-day__split-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-4) var(--space-3);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .schedule-day__split-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  /* Toggle switch */
   .toggle {
     position: relative;
     display: inline-flex;
@@ -231,6 +476,20 @@
     background: var(--color-primary);
   }
 
+  .toggle--sm {
+    width: 36px;
+    height: 20px;
+
+    .toggle__thumb {
+      width: 16px;
+      height: 16px;
+    }
+
+    &.toggle--on .toggle__thumb {
+      transform: translateX(16px);
+    }
+  }
+
   .toggle__thumb {
     width: 20px;
     height: 20px;
@@ -244,8 +503,21 @@
     transform: translateX(20px);
   }
 
+  /* Validation errors */
+  .time-error {
+    margin: var(--space-1) 0 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+  }
+
+  .time-error--top {
+    margin: 0;
+    padding: 0 var(--space-4) var(--space-2);
+  }
+
+  /* Day-off warning banner */
   .schedule-day__warning {
-    padding: var(--space-3) var(--space-5) var(--space-4);
+    padding: var(--space-3) var(--space-4) var(--space-4);
     background: var(--color-pending-bg);
     border-top: 1px solid var(--color-border);
   }
