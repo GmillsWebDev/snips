@@ -1,7 +1,10 @@
 <script>
-    
+	import Nav from '$lib/components/landing/Nav.svelte';
 </script>
 
-<h1>Welcome</h1>
-<p>public page</p>
+<Nav />
 
+<div class="container">
+	<h1>Welcome to Snips!</h1>
+	<p>Your one-stop solution for seamless appointment scheduling.</p>
+</div>

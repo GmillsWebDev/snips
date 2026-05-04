@@ -2,6 +2,16 @@
    CSS Custom Properties
 =========================== */
 :root {
+  /* Landing Branding */
+  --color-brand-primary:#2d5a27;
+  --color-brand-primary-hover: color-mix(in srgb, var(--color-brand-primary) 75%, black);
+  --color-brand-secondary:#8e4432;
+  --color-brand-secondary-hover: color-mix(in srgb, var(--color-brand-secondary) 75%, black);
+  --color-brand-text: #e8e8e4;
+  --color-brand-subtext: #707a70;
+  --color-brand-background: #121412;
+  --color-brandsurface: #2e362c;
+
   /* Brand */
   --color-primary: #0b0b92;
   --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
