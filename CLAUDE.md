@@ -269,6 +269,46 @@ Use Supabase's generated types where available. When querying with `.select()`, 
 
 ---
 
+## SvelteKit Patterns
+
+### Calling form actions via fetch (no `use:enhance`)
+
+When you need to call a form action manually from client-side JS (e.g. debounced saves, programmatic submissions), send the `x-sveltekit-action: true` header. SvelteKit will return a JSON response instead of a redirect:
+
+```typescript
+const response = await fetch('?/myAction', {
+  method: 'POST',
+  body: new FormData(formElement),
+  headers: { 'x-sveltekit-action': 'true' },
+})
+
+const result = await response.json() as {
+  type: 'success' | 'failure' | 'redirect'
+  data?: Record<string, unknown>
+}
+
+if (result.type === 'success') { /* ... */ }
+else { /* result.data contains the fail() payload */ }
+```
+
+Without this header, successful actions return a 303 redirect which `fetch` follows silently and you lose the action data.
+
+### Non-reactive DOM refs in loops
+
+When you need element references inside `{#each}` but don't need reactivity on the refs themselves, use a plain object (not `$state`) with `bind:this`:
+
+```typescript
+const formRefs: Record<string, HTMLFormElement | null> = {}
+```
+
+```svelte
+<form bind:this={formRefs[`${item.id}`]}>...</form>
+```
+
+Read the refs inside callbacks (e.g. `setTimeout`, event handlers) — they'll be populated by the time any user-triggered async code runs.
+
+---
+
 ## Edge Functions (Supabase)
 
 - Runtime: **Deno** — use `Deno.env.get()` for environment variables

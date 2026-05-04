@@ -474,6 +474,7 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Notification preferences | Separate `customer_notification_preferences` table (not columns on `customers`) | Keeps customers table clean; adding new channels (WhatsApp, SMS) is a targeted migration rather than widening a core table. WhatsApp and SMS columns exist from the start, defaulting to false, ready to activate when those integrations are built. |
 | Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
 | Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
+| Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |
 
 ---
 

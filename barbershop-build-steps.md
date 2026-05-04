@@ -51,8 +51,8 @@
 ---
 
 ## 6 — Services & Schedule Management
-- [ ] 6.1 Service CRUD (name, price, duration, display order, deposit amount)
-- [ ] 6.2 Availability rules (per barber, per day of week)
+- [x] 6.1 Service CRUD (name, price, duration, display order, soft-delete with confirmation modal)
+- [x] 6.2 Availability rules (per barber, per day of week, split shifts, debounced auto-save with inline feedback)
 - [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off, one off days added)
 - [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
 
