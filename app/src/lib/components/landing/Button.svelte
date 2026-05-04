@@ -38,4 +38,11 @@
       }
     }
   }
+
+  @media screen and (max-width: 768px) {
+    .button {
+      width: 100%;
+      text-align: center;
+    }
+  }
 </style>

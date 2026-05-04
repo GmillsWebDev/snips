@@ -78,12 +78,12 @@
 <style>
   .navbar {
     padding: 1rem 0;
-    background-color: var(--colour-background);
+    background-color: var(--color-brand-background);
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
     width: 100vw;
     position: relative;
     z-index: 10;
-	border-bottom: 1px solid var(--colour-primary);
+	  /* border-bottom: 1px solid var(--color-brand-secondary); */
   }
 
   .navbarContainer {
@@ -96,7 +96,7 @@
   .navbar__logo {
     font-size: 1.5rem;
     font-weight: bold;
-    color: var(--colour-primary);
+    color: var(--color-brand-primary);
     img {
       width: 9rem;
       height: auto;
@@ -107,27 +107,23 @@
     display: flex;
     align-items: center;
     gap: 1.5rem;
-	background: var(--colour-background);
+	background: var(--color-brand-background);
     transition: none;
   }
 
   .navbar__link {
     text-decoration: none;
-    color: var(--colour-white);
+    color: var(--color-brand-text);
     position: relative;
     padding: 0.25rem 0;
     transition: color 0.2s;
-  }
-
-  .navbar__link.active::after {
-    content: "";
-    display: block;
-    width: 100%;
-    height: 3px;
-    background-color: var(--colour-primary);
-    position: absolute;
-    bottom: -5px;
-    left: 0;
+    font-size: var(--font-size-lg);
+    &:not(.active){
+      color: var(--color-brand-subtext);
+      &:hover{
+        color: var(--color-brand-text);
+      }
+    }
   }
 
   .hamburger {
@@ -136,12 +132,13 @@
     cursor: pointer;
     margin-left: 1rem;
     transition: all 0.5s;
+    z-index: 100;
   }
 
   .bar {
     width: 25px;
     height: 2px;
-    background-color: var(--colour-primary);
+    background-color: var(--color-brand-text);
     margin: 2px 0;
     border-radius: 1px;
     transition: all 0.5s;
@@ -161,6 +158,7 @@
     opacity: 0;
     transform: translateX(100%);
     transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    gap: 0.5rem
     }
 
     .hamburger {
@@ -172,11 +170,12 @@
     flex-direction: column;
     position: absolute;
     align-items: flex-start;
-    top: 7rem;
+    top: -0.5rem;
     right: 0;
     box-shadow: -10px 11px 11px rgba(23, 59, 34, 0.4);
-    width: fit-content;
-    padding: 1rem 3rem;
+    width: 50%;
+    min-width: fit-content;
+    padding: 4rem 2rem 1.5rem 2rem;
     z-index: 9;
     opacity: 1;
     transform: translateX(0);
