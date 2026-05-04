@@ -43,15 +43,16 @@ Deno.serve(async (req) => {
 
     if (!service) return json({ error: "Service not found" }, 404);
 
-    // 2. Barber availability rule for this day of week
-    const { data: rule } = await supabase
+    // 2. All availability rules for this barber/day, working shifts only, ordered by shift
+    const { data: rules } = await supabase
       .from("availability_rules")
-      .select("start_time, end_time, is_working")
+      .select("start_time, end_time, shift_number")
       .eq("barber_id", barber_id)
       .eq("day_of_week", dayOfWeek)
-      .single();
+      .eq("is_working", true)
+      .order("shift_number", { ascending: true });
 
-    if (!rule || !rule.is_working) {
+    if (!rules || rules.length === 0) {
       return json({ slots: [] });
     }
 
@@ -66,22 +67,9 @@ Deno.serve(async (req) => {
     const timezone: string = barber?.shop?.timezone ?? "Europe/London";
     const slotDuration = service.duration_minutes + bufferMinutes;
 
-    // 4. Construct work window in the shop's local timezone so that
-    //    09:00 Europe/London in BST becomes 08:00 UTC, not 09:00 UTC.
-    const [startHour, startMin] = rule.start_time.split(":").map(Number);
-    const [endHour, endMin] = rule.end_time.split(":").map(Number);
     const [year, month, day] = date.split("-").map(Number);
 
-    const workStart = DateTime.fromObject(
-      { year, month, day, hour: startHour, minute: startMin, second: 0 },
-      { zone: timezone },
-    );
-    const workEnd = DateTime.fromObject(
-      { year, month, day, hour: endHour, minute: endMin, second: 0 },
-      { zone: timezone },
-    );
-
-    // 5. Query bookings and blocked slots.
+    // 4. Query bookings and blocked slots.
     //    Bounds span the full calendar day in the shop timezone (converted to UTC)
     //    so that events crossing UTC midnight are never missed.
     //    Blocked slots use overlap logic (start < dayEnd AND end > dayStart)
@@ -112,38 +100,58 @@ Deno.serve(async (req) => {
         .gt("end_at", dayStart),  // block ends after start of day
     ]);
 
-    // 6. Generate slots — all arithmetic in UTC milliseconds so timezone
-    //    offsets are already baked in via Luxon's toMillis().
+    // 5. SPLIT SHIFT: generate slots per shift row and merge — all arithmetic in
+    //    UTC milliseconds so timezone offsets are already baked in via Luxon's toMillis().
     const slotMs = slotDuration * 60 * 1000;
-    const slots: string[] = [];
-    let cursor = workStart;
+    const allSlots: string[] = [];
 
-    while (cursor.toMillis() + slotMs <= workEnd.toMillis()) {
-      const slotEnd = cursor.plus({ milliseconds: slotMs });
-      const cursorMs = cursor.toMillis();
-      const slotEndMs = slotEnd.toMillis();
+    for (const rule of rules) {
+      const [startHour, startMin] = rule.start_time.split(":").map(Number);
+      const [endHour, endMin] = rule.end_time.split(":").map(Number);
 
-      const isBooked = (existingBookings ?? []).some((b) => {
-        const bStart = DateTime.fromISO(b.start_at).toMillis();
-        const bEnd = DateTime.fromISO(b.end_at).toMillis();
-        return cursorMs < bEnd && slotEndMs > bStart;
-      });
+      // Construct work window in the shop's local timezone so that
+      // 09:00 Europe/London in BST becomes 08:00 UTC, not 09:00 UTC.
+      const workStart = DateTime.fromObject(
+        { year, month, day, hour: startHour, minute: startMin, second: 0 },
+        { zone: timezone },
+      );
+      const workEnd = DateTime.fromObject(
+        { year, month, day, hour: endHour, minute: endMin, second: 0 },
+        { zone: timezone },
+      );
 
-      const isBlocked = (blockedSlots ?? []).some((b) => {
-        const bStart = DateTime.fromISO(b.start_at).toMillis();
-        const bEnd = DateTime.fromISO(b.end_at).toMillis();
-        return cursorMs < bEnd && slotEndMs > bStart;
-      });
+      let cursor = workStart;
 
-      if (!isBooked && !isBlocked) {
-        // Return as UTC ISO — the frontend formats to local time using the shop timezone
-        slots.push(cursor.toUTC().toISO() ?? "");
+      while (cursor.toMillis() + slotMs <= workEnd.toMillis()) {
+        const slotEnd = cursor.plus({ milliseconds: slotMs });
+        const cursorMs = cursor.toMillis();
+        const slotEndMs = slotEnd.toMillis();
+
+        const isBooked = (existingBookings ?? []).some((b) => {
+          const bStart = DateTime.fromISO(b.start_at).toMillis();
+          const bEnd = DateTime.fromISO(b.end_at).toMillis();
+          return cursorMs < bEnd && slotEndMs > bStart;
+        });
+
+        const isBlocked = (blockedSlots ?? []).some((b) => {
+          const bStart = DateTime.fromISO(b.start_at).toMillis();
+          const bEnd = DateTime.fromISO(b.end_at).toMillis();
+          return cursorMs < bEnd && slotEndMs > bStart;
+        });
+
+        if (!isBooked && !isBlocked) {
+          // Return as UTC ISO — the frontend formats to local time using the shop timezone
+          allSlots.push(cursor.toUTC().toISO() ?? "");
+        }
+
+        cursor = cursor.plus({ minutes: slotDuration });
       }
-
-      cursor = cursor.plus({ minutes: slotDuration });
     }
 
-    return json({ slots });
+    // UTC ISO strings sort lexicographically by time, so a plain sort is correct.
+    allSlots.sort();
+
+    return json({ slots: allSlots });
   } catch (err) {
     console.error(err);
     return json({ error: err.message }, 500);

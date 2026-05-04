@@ -6,6 +6,7 @@
 		{ href: '/admin/dashboard', label: 'Dashboard', exact: true },
 		{ href: '/admin/bookings', label: 'Bookings', exact: false },
 		{ href: '/admin/services', label: 'Services', exact: false },
+		{ href: '/admin/schedule', label: 'Schedule', exact: false },
 	], brand = 'Snips' } = $props()
 </script>
 
