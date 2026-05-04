@@ -1,6 +1,6 @@
 <script lang="ts">
   import { enhance } from '$app/forms'
-  import type { ActionResult } from '@sveltejs/kit'
+  import { onDestroy } from 'svelte'
   import type { PageData } from './$types'
   import type { AvailabilityRule } from './+page.server'
 
@@ -35,23 +35,107 @@
     }),
   )
 
-  // Keyed by `${dow}-${shiftNumber}`
-  let timeErrors = $state<Record<string, string>>({})
   let warning = $state<{ dow: number; count: number } | null>(null)
   let submitting = $state<number | null>(null)
 
-  function makeTimesEnhance(dow: number, shiftNum: number) {
-    return () => {
-      const key = `${dow}-${shiftNum}`
-      return async ({ result }: { result: ActionResult }) => {
-        if (result.type === 'failure') {
-          timeErrors[key] = ((result.data as Record<string, unknown>)?.message as string) ?? 'Invalid times'
-        } else {
-          delete timeErrors[key]
-        }
+  // Per-row debounce/save state keyed by `${dow}-${shiftNumber}`
+  type RowState = {
+    pendingTimer: ReturnType<typeof setTimeout> | null
+    isSaving: boolean
+    saveStatus: null | 'saved' | 'error'
+    errorMessage: string
+    successTimer: ReturnType<typeof setTimeout> | null
+    abortController: AbortController | null
+  }
+
+  let rowStates = $state<Record<string, RowState>>({})
+  const formRefs: Record<string, HTMLFormElement | null> = {}
+
+  function stripSeconds(t: string): string {
+    return t.slice(0, 5)
+  }
+
+  function getRow(key: string): RowState {
+    if (!rowStates[key]) {
+      rowStates[key] = {
+        pendingTimer: null,
+        isSaving: false,
+        saveStatus: null,
+        errorMessage: '',
+        successTimer: null,
+        abortController: null,
       }
     }
+    return rowStates[key]
   }
+
+  function triggerDebouncedSave(dow: number, shiftNum: number): void {
+    const key = `${dow}-${shiftNum}`
+    const row = getRow(key)
+
+    if (row.pendingTimer !== null) clearTimeout(row.pendingTimer)
+    row.saveStatus = null
+    if (row.successTimer !== null) {
+      clearTimeout(row.successTimer)
+      row.successTimer = null
+    }
+
+    row.pendingTimer = setTimeout(async () => {
+      row.pendingTimer = null
+
+      if (row.abortController) row.abortController.abort()
+      const controller = new AbortController()
+      row.abortController = controller
+
+      row.isSaving = true
+
+      const form = formRefs[key]
+      if (!form) {
+        row.isSaving = false
+        return
+      }
+
+      try {
+        const response = await fetch('?/updateTimes', {
+          method: 'POST',
+          body: new FormData(form),
+          signal: controller.signal,
+          headers: { 'x-sveltekit-action': 'true' },
+        })
+
+        const result = (await response.json()) as {
+          type: string
+          data?: { message?: string }
+        }
+
+        if (result.type === 'success') {
+          row.isSaving = false
+          row.saveStatus = 'saved'
+          row.successTimer = setTimeout(() => {
+            row.saveStatus = null
+            row.successTimer = null
+          }, 2000)
+        } else {
+          row.isSaving = false
+          row.saveStatus = 'error'
+          row.errorMessage = result.data?.message ?? 'Failed to save'
+        }
+      } catch (err) {
+        if ((err as Error).name === 'AbortError') return
+        row.isSaving = false
+        row.saveStatus = 'error'
+        row.errorMessage = 'Failed to save'
+      }
+    }, 700)
+  }
+
+  onDestroy(() => {
+    for (const row of Object.values(rowStates)) {
+      if (row.pendingTimer !== null) clearTimeout(row.pendingTimer)
+      if (row.successTimer !== null) clearTimeout(row.successTimer)
+      if (row.abortController) row.abortController.abort()
+    }
+  })
 </script>
 
 <svelte:head>
@@ -78,8 +162,7 @@
                 method="POST"
                 action="?/updateTimes"
                 class="times-form"
-                onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
-                use:enhance={makeTimesEnhance(day.dow, 1)}
+                bind:this={formRefs[`${day.dow}-1`]}
               >
                 <input type="hidden" name="dayOfWeek" value={day.dow} />
                 <input type="hidden" name="shiftNumber" value="1" />
@@ -88,17 +171,22 @@
                     class="time-input"
                     type="time"
                     name="startTime"
-                    value={day.shift1.start_time}
-                    oninput={() => delete timeErrors[`${day.dow}-1`]}
+                    value={stripSeconds(day.shift1.start_time)}
+                    oninput={() => triggerDebouncedSave(day.dow, 1)}
                   />
                   <span class="times-sep">→</span>
                   <input
                     class="time-input"
                     type="time"
                     name="endTime"
-                    value={day.shift1.end_time}
-                    oninput={() => delete timeErrors[`${day.dow}-1`]}
+                    value={stripSeconds(day.shift1.end_time)}
+                    oninput={() => triggerDebouncedSave(day.dow, 1)}
                   />
+                  {#if rowStates[`${day.dow}-1`]?.isSaving}
+                    <span class="save-spinner" aria-hidden="true"></span>
+                  {:else if rowStates[`${day.dow}-1`]?.saveStatus === 'saved'}
+                    <span class="save-status save-status--saved">Saved ✓</span>
+                  {/if}
                 </div>
               </form>
             {:else if !day.isWorking}
@@ -139,8 +227,8 @@
         </div>
 
         <!-- Single-shift time error (below header, above split row) -->
-        {#if day.isWorking && !day.hasSplit && timeErrors[`${day.dow}-1`]}
-          <p class="time-error time-error--top">{timeErrors[`${day.dow}-1`]}</p>
+        {#if day.isWorking && !day.hasSplit && rowStates[`${day.dow}-1`]?.saveStatus === 'error'}
+          <p class="time-error time-error--top">{rowStates[`${day.dow}-1`].errorMessage}</p>
         {/if}
 
         <!-- Split shift time rows -->
@@ -154,8 +242,7 @@
                     method="POST"
                     action="?/updateTimes"
                     class="times-form"
-                    onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
-                    use:enhance={makeTimesEnhance(day.dow, 1)}
+                    bind:this={formRefs[`${day.dow}-1`]}
                   >
                     <input type="hidden" name="dayOfWeek" value={day.dow} />
                     <input type="hidden" name="shiftNumber" value="1" />
@@ -164,22 +251,27 @@
                         class="time-input"
                         type="time"
                         name="startTime"
-                        value={day.shift1.start_time}
-                        oninput={() => delete timeErrors[`${day.dow}-1`]}
+                        value={stripSeconds(day.shift1.start_time)}
+                        oninput={() => triggerDebouncedSave(day.dow, 1)}
                       />
                       <span class="times-sep">→</span>
                       <input
                         class="time-input"
                         type="time"
                         name="endTime"
-                        value={day.shift1.end_time}
-                        oninput={() => delete timeErrors[`${day.dow}-1`]}
+                        value={stripSeconds(day.shift1.end_time)}
+                        oninput={() => triggerDebouncedSave(day.dow, 1)}
                       />
+                      {#if rowStates[`${day.dow}-1`]?.isSaving}
+                        <span class="save-spinner" aria-hidden="true"></span>
+                      {:else if rowStates[`${day.dow}-1`]?.saveStatus === 'saved'}
+                        <span class="save-status save-status--saved">Saved ✓</span>
+                      {/if}
                     </div>
                   </form>
                 </div>
-                {#if timeErrors[`${day.dow}-1`]}
-                  <p class="time-error">{timeErrors[`${day.dow}-1`]}</p>
+                {#if rowStates[`${day.dow}-1`]?.saveStatus === 'error'}
+                  <p class="time-error">{rowStates[`${day.dow}-1`].errorMessage}</p>
                 {/if}
               </div>
             {/if}
@@ -191,8 +283,7 @@
                     method="POST"
                     action="?/updateTimes"
                     class="times-form"
-                    onchange={(e) => (e.currentTarget as HTMLFormElement).requestSubmit()}
-                    use:enhance={makeTimesEnhance(day.dow, 2)}
+                    bind:this={formRefs[`${day.dow}-2`]}
                   >
                     <input type="hidden" name="dayOfWeek" value={day.dow} />
                     <input type="hidden" name="shiftNumber" value="2" />
@@ -201,22 +292,27 @@
                         class="time-input"
                         type="time"
                         name="startTime"
-                        value={day.shift2.start_time}
-                        oninput={() => delete timeErrors[`${day.dow}-2`]}
+                        value={stripSeconds(day.shift2.start_time)}
+                        oninput={() => triggerDebouncedSave(day.dow, 2)}
                       />
                       <span class="times-sep">→</span>
                       <input
                         class="time-input"
                         type="time"
                         name="endTime"
-                        value={day.shift2.end_time}
-                        oninput={() => delete timeErrors[`${day.dow}-2`]}
+                        value={stripSeconds(day.shift2.end_time)}
+                        oninput={() => triggerDebouncedSave(day.dow, 2)}
                       />
+                      {#if rowStates[`${day.dow}-2`]?.isSaving}
+                        <span class="save-spinner" aria-hidden="true"></span>
+                      {:else if rowStates[`${day.dow}-2`]?.saveStatus === 'saved'}
+                        <span class="save-status save-status--saved">Saved ✓</span>
+                      {/if}
                     </div>
                   </form>
                 </div>
-                {#if timeErrors[`${day.dow}-2`]}
-                  <p class="time-error">{timeErrors[`${day.dow}-2`]}</p>
+                {#if rowStates[`${day.dow}-2`]?.saveStatus === 'error'}
+                  <p class="time-error">{rowStates[`${day.dow}-2`].errorMessage}</p>
                 {/if}
               </div>
             {/if}
@@ -409,6 +505,31 @@
     color: var(--color-text-subtle);
     font-size: var(--font-size-sm);
     flex-shrink: 0;
+  }
+
+  /* Save status indicators */
+  .save-spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--color-border);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .save-status {
+    font-size: var(--font-size-xs);
+    flex-shrink: 0;
+  }
+
+  .save-status--saved {
+    color: var(--color-accepted-text);
   }
 
   /* Split shift rows */
