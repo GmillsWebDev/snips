@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
       .from("bookings")
       .select(`
         *,
-        shop:shops(name, brand_colour, logo_url, owner_id),
+        shop:shops(name, owner_id),
         customer:customers(name, email),
         service:services(name),
         barber:barbers(name)

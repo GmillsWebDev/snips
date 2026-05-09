@@ -56,14 +56,14 @@ Deno.serve(async (req) => {
       return json({ slots: [] });
     }
 
-    // 3. Shop buffer time and timezone (via barber → shop join)
+    // 3. Shop buffer time and timezone (via barber → shop → shop_preferences)
     const { data: barber } = await supabase
       .from("barbers")
-      .select("shop:shops(buffer_minutes, timezone)")
+      .select("shop:shops(timezone, shop_preferences(buffer_minutes))")
       .eq("id", barber_id)
       .single();
 
-    const bufferMinutes: number = barber?.shop?.buffer_minutes ?? 0;
+    const bufferMinutes: number = barber?.shop?.shop_preferences?.buffer_minutes ?? 0;
     const timezone: string = barber?.shop?.timezone ?? "Europe/London";
     const slotDuration = service.duration_minutes + bufferMinutes;
 

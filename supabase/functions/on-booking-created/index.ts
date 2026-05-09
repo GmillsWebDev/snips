@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
       .from("bookings")
       .select(`
         *,
-        shop:shops(name, brand_colour, logo_url, auto_accept),
+        shop:shops(name, shop_preferences(auto_accept)),
         customer:customers(name, email),
         service:services(name, duration_minutes, price_pence),
         barber:barbers(name)
@@ -45,7 +45,7 @@ Deno.serve(async (req) => {
     });
 
     // Auto-accept if shop has it enabled
-    if (fullBooking.shop.auto_accept) {
+    if (fullBooking.shop.shop_preferences?.auto_accept) {
       await supabase
         .from("bookings")
         .update({ status: "accepted" })

@@ -29,8 +29,8 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
   const admin = createSupabaseAdminClient()
   const { dayStart, dayEnd } = getLondonDayBounds()
 
-  const [shopResult, bookingsResult, pendingResult, expiringRecurrences] = await Promise.all([
-    admin.from('shops').select('brand_colour').eq('id', shopId).single(),
+  const [brandingResult, bookingsResult, pendingResult, expiringRecurrences] = await Promise.all([
+    admin.from('client_branding').select('color_primary').eq('shop_id', shopId).maybeSingle(),
     admin
       .from('bookings')
       .select(`
@@ -105,6 +105,6 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
     },
     needsAttention,
     expiringRecurrences,
-    brandColour: shopResult.data?.brand_colour ?? null,
+    brandColour: brandingResult.data?.color_primary ?? null,
   }
 }

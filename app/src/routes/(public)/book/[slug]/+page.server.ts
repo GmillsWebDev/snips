@@ -5,9 +5,9 @@ import { resolveCustomer } from '$lib/server/resolveCustomer'
 import { resolveChair } from '$lib/server/resolveChair'
 
 export const load: PageServerLoad = async ({ params, locals }) => {
-  const { data: shop, error: shopError } = await locals.supabase
+  const { data: shopRaw, error: shopError } = await locals.supabase
     .from('shops')
-    .select('id, name, plan_type, booking_window_days, timezone')
+    .select('id, name, plan_type, timezone, shop_preferences(booking_window_days)')
     .eq('slug', params.slug)
     .eq('is_active', true)
     .single()
@@ -15,6 +15,14 @@ export const load: PageServerLoad = async ({ params, locals }) => {
   if (shopError) {
     if (shopError.code === 'PGRST116') error(404, 'Shop not found')
     throw shopError
+  }
+
+  const shop = {
+    id: shopRaw.id,
+    name: shopRaw.name,
+    plan_type: shopRaw.plan_type,
+    timezone: shopRaw.timezone,
+    booking_window_days: shopRaw.shop_preferences?.booking_window_days ?? 30,
   }
 
   const [servicesResult, barberResult] = await Promise.all([
