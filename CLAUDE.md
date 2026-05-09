@@ -216,6 +216,7 @@ Reusable server-only helpers live in `$lib/server/`. Use these instead of inlini
 | `resolveCustomer.ts` | Find-or-create a customer row by `shop_id` + `email`. Patches `user_id` onto an existing row when an auth account is present. Used in the booking creation flow. |
 | `resolveChair.ts` | Returns a chair id for a barber/shop: prefers the barber's assigned chair, falls back to any active shop chair. Returns `null` if none found. |
 | `getRole.ts` | Fetches the `user_roles` row for the current user — used in admin route guards. |
+| `getExpiringRecurrences.ts` | Returns one representative row per recurring blocked-slot series that expires within 30 days. Used by both the admin dashboard and blocked-slots load functions. |
 
 **Customer lookup — two distinct patterns, do not conflate:**
 
@@ -384,7 +385,7 @@ Steps completed through build checklist:
 - [x] 6.1 Service CRUD
 - [x] 6.2 Availability rules (per barber, per day of week, split shifts)
 - [x] 6.3 Blocked slots UI (one-off full day, custom range, recurring breaks, expiry alerts, auto-extend cron)
-- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
+- [~] 6.4 Shop settings — schema done, UI next
 - [ ] 7+ — Notifications, polish, multi-barber, payments
 
 ---
@@ -398,6 +399,16 @@ Steps completed through build checklist:
 - `get-available-slots` Edge Function generates one slot block per shift row and merges them
 - Schedule page uses debounced auto-save (700ms) for time inputs with per-row spinner and saved/error feedback
 - Day on/off toggle warns admin if upcoming bookings exist on that day before proceeding
+
+### Shop Settings Schema
+
+- `auto_accept`, `booking_window_days`, `buffer_minutes` are on `shop_preferences`, NOT `shops` — always join or query that table
+- `logo_url` and brand colour are on `client_branding` (as `color_primary`), NOT `shops`
+- `shop_preferences` and `shop_display_settings` are 1:1 with shops; a trigger (`trigger_create_shop_defaults`) auto-creates both rows on every new shop INSERT
+- `deposit_amount_pence` (nullable integer, pence) is now a column on `services`
+- When querying `buffer_minutes` in edge functions, embed via `shop:shops(timezone, shop_preferences(buffer_minutes))` and access as `barber?.shop?.shop_preferences?.buffer_minutes`
+- When querying brand colour for the admin dashboard, query `client_branding.color_primary` directly — not `shops.brand_colour`
+- `getShopPreferences` pattern: use a direct `.from('shop_preferences').select(...).eq('shop_id', shopId).single()` in server load functions
 
 ### Blocked Slots
 

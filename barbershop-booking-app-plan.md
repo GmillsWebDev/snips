@@ -50,19 +50,40 @@ Every shop registers with a `plan_type` that gates features and determines UI re
 
 ### `shops`
 ```sql
-id                   uuid PK
-owner_id             uuid → auth.users
-name                 text
-slug                 text UNIQUE        -- e.g. "cuts-by-dave" for public booking URL
-plan_type            text               -- 'solo' | 'multi'
-auto_accept          boolean DEFAULT false
-booking_window_days  int DEFAULT 28     -- how far ahead customers can book
-buffer_minutes       int DEFAULT 0      -- gap between appointments
-timezone             text DEFAULT 'Europe/London'
-logo_url             text
-brand_colour         text               -- hex, for branded emails
-is_active            boolean DEFAULT true
-created_at           timestamptz
+id         uuid PK
+owner_id   uuid → auth.users
+name       text
+slug       text UNIQUE        -- e.g. "cuts-by-dave" for public booking URL
+plan_type  text               -- 'solo' | 'multi'
+timezone   text DEFAULT 'Europe/London'
+is_active  boolean DEFAULT true
+created_at timestamptz
+```
+
+> Booking behaviour settings (auto_accept, booking_window_days, buffer_minutes) have moved to `shop_preferences`. Visual identity (logo_url, brand_colour) was already in `client_branding`. A trigger (`trigger_create_shop_defaults`) auto-inserts default rows into both `shop_preferences` and `shop_display_settings` whenever a new shop is created.
+
+### `shop_preferences`
+```sql
+id                  uuid PK
+shop_id             uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+auto_accept         boolean NOT NULL DEFAULT false
+booking_window_days integer NOT NULL DEFAULT 30
+buffer_minutes      integer NOT NULL DEFAULT 0
+deposit_required    boolean NOT NULL DEFAULT false
+show_shop_page      boolean NOT NULL DEFAULT false
+created_at          timestamptz
+updated_at          timestamptz           -- auto-updated via handle_updated_at() trigger
+```
+
+### `shop_display_settings`
+```sql
+id                    uuid PK
+shop_id               uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+info_panel_enabled    boolean NOT NULL DEFAULT false
+info_panel_message    text NULL
+info_panel_expires_at timestamptz NULL
+created_at            timestamptz
+updated_at            timestamptz           -- auto-updated via handle_updated_at() trigger
 ```
 
 ### `barbers`
@@ -92,14 +113,15 @@ is_active   boolean
 
 ### `services`
 ```sql
-id               uuid PK
-shop_id          uuid → shops
-name             text               -- e.g. "Skin Fade"
-description      text
-duration_minutes int
-price_pence      int                -- store in pence, display as £
-is_active        boolean
-display_order    int
+id                   uuid PK
+shop_id              uuid → shops
+name                 text               -- e.g. "Skin Fade"
+description          text
+duration_minutes     int
+price_pence          int                -- store in pence, display as £
+deposit_amount_pence int NULL           -- nullable; per-service deposit override
+is_active            boolean
+display_order        int
 ```
 
 ### `availability_rules`
@@ -484,6 +506,7 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Plan gating | Single `plan_type` field on `shops` | Simple, no extra tables, easy to extend |
 | Notification preferences | Separate `customer_notification_preferences` table (not columns on `customers`) | Keeps customers table clean; adding new channels (WhatsApp, SMS) is a targeted migration rather than widening a core table. WhatsApp and SMS columns exist from the start, defaulting to false, ready to activate when those integrations are built. |
 | Blocked slots recurrence | `recurrence_pattern` enum (`none/daily/weekly/fortnightly/monthly`) + `recurrence_id`, `recurrence_end_date`, `generated_until` columns on `blocked_slots`. Full recurring UI built: create/edit/delete with single vs. future scope, booking-conflict warning flow, expiry alerts on dashboard and blocked-slots page, manual extend action, and `extend-recurring-blocks` daily cron as fallback. |
+| Shop settings normalised out of `shops` | `auto_accept`, `booking_window_days`, `buffer_minutes` moved to `shop_preferences`; `logo_url`/`brand_colour` were already in `client_branding`. `shop_preferences` and `shop_display_settings` are 1:1 with shops, auto-created by trigger. `deposit_amount_pence` added to `services` for per-service deposit overrides. |
 | Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
 | Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
 | Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |
