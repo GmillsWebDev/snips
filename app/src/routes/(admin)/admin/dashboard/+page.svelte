@@ -40,6 +40,19 @@
     <span class="dashboard__date">{today}</span>
   </header>
 
+  {#if data.expiringRecurrences.length > 0}
+    <a href="/admin/blocked-slots" class="expiry-alert">
+      <span class="expiry-alert__icon" aria-hidden="true">⚠</span>
+      <span class="expiry-alert__text">
+        {#if data.expiringRecurrences.length === 1}
+          1 recurring break expires within 30 days. Review your schedule.
+        {:else}
+          {data.expiringRecurrences.length} recurring breaks expire within 30 days. Review your schedule.
+        {/if}
+      </span>
+    </a>
+  {/if}
+
   <div class="stats">
     {#each [
       { value: data.stats.total,     label: 'Total',     mod: 'brand'     },
@@ -225,5 +238,36 @@
   .booking-row__service {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  /* ── Expiry alert ────────────────────────────────── */
+
+  .expiry-alert {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-pending-bg);
+    border: 1px solid var(--color-pending-text);
+    border-radius: var(--radius-lg);
+    text-decoration: none;
+    color: var(--color-pending-text);
+    transition: var(--transition);
+
+    &:hover {
+      opacity: 0.85;
+    }
+  }
+
+  .expiry-alert__icon {
+    font-size: var(--font-size-lg);
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .expiry-alert__text {
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    line-height: 1.4;
   }
 </style>

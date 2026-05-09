@@ -376,6 +376,43 @@ This project is hosted on **Netlify** — not Vercel. Apply this everywhere host
 
 ---
 
+## Current Build Status
+
+Steps completed through build checklist:
+
+- [x] 1–5 — Foundation, booking flow, admin core, customer portal
+- [x] 6.1 Service CRUD
+- [x] 6.2 Availability rules (per barber, per day of week, split shifts)
+- [x] 6.3 Blocked slots UI (one-off full day, custom range, recurring breaks, expiry alerts, auto-extend cron)
+- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
+- [ ] 7+ — Notifications, polish, multi-barber, payments
+
+---
+
+## Key Implementation Details
+
+### Availability Rules
+
+- `availability_rules` supports split shifts via `shift_number` column (1 or 2)
+- Unique constraint is on `(barber_id, day_of_week, shift_number)`
+- `get-available-slots` Edge Function generates one slot block per shift row and merges them
+- Schedule page uses debounced auto-save (700ms) for time inputs with per-row spinner and saved/error feedback
+- Day on/off toggle warns admin if upcoming bookings exist on that day before proceeding
+
+### Blocked Slots
+
+- `blocked_slots` supports one-off (full day and custom range) and recurring breaks (daily, weekly, fortnightly, monthly)
+- Recurring series share a `recurrence_id` uuid across all generated rows
+- `generated_until` is stored on the first row of each series only (lowest `start_at`), pointing to the date of the last generated occurrence
+- Rows are generated up to 18 months ahead or `recurrence_end_date` (whichever comes first)
+- Expiry alerts surface on the admin dashboard and blocked-slots page when a series expires within 30 days
+- Auto-extend cron (`extend-recurring-blocks`) runs daily at 3am UTC and tops up series expiring within 14 days as a fallback
+- Edit and delete on recurring series ask: this occurrence only, or this and all future
+- Creating or editing blocks that overlap upcoming bookings triggers a warning with a count before confirming
+- `getExpiringRecurrences.ts` is a shared server helper (`$lib/server/`) used by both the dashboard and blocked-slots load functions
+
+---
+
 ## Reference Docs
 
 These files contain the full project plan and build checklist — read them when you need broader context on architecture, the DB schema, the booking state machine, or what phase of the build we're in:

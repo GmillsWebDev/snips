@@ -107,19 +107,29 @@ display_order    int
 id           uuid PK
 barber_id    uuid → barbers
 day_of_week  int               -- 0=Sun, 6=Sat
+shift_number int DEFAULT 1     -- 1 or 2; supports split shifts (e.g. morning + afternoon)
 start_time   time
 end_time     time
 is_working   boolean
+-- UNIQUE (barber_id, day_of_week, shift_number)
 ```
+
+> Split shifts: a barber can have two rows per day (shift_number 1 and 2). `get-available-slots` generates one slot block per shift row and merges them.
 
 ### `blocked_slots`
 ```sql
-id          uuid PK
-barber_id   uuid → barbers
-start_at    timestamptz
-end_at      timestamptz
-reason      text               -- "Holiday", "Lunch", etc.
+id                   uuid PK
+barber_id            uuid → barbers
+start_at             timestamptz
+end_at               timestamptz
+reason               text               -- "Holiday", "Lunch", etc.
+recurrence_pattern   text DEFAULT 'none' -- 'none' | 'daily' | 'weekly' | 'fortnightly' | 'monthly'
+recurrence_id        uuid               -- nullable; shared across all rows in a series
+recurrence_end_date  date               -- nullable; optional admin-set end date for the series
+generated_until      date               -- nullable; stored on FIRST row of series only; date of last generated occurrence
 ```
+
+> Recurring series: all occurrence rows share the same `recurrence_id`. `generated_until` is stamped only on the first row (lowest `start_at`) and points to the last generated occurrence date. Rows are pre-generated up to 18 months ahead or `recurrence_end_date`, whichever comes first.
 
 ### `customers`
 ```sql
@@ -309,7 +319,8 @@ src/routes/
 | `send-reminders` | Cron (daily 8am) | Find bookings in 24hrs, send Brevo reminders |
 | `expire-pending` | Cron (hourly) | Auto-expire pending bookings older than X hrs |
 | `notify-waitlist` | DB webhook on cancel | Find waitlisted customers, send slot-open email |
-| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings |
+| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings. Handles multiple `availability_rules` rows per day (split shifts) — generates one slot block per shift row and merges results. |
+| `extend-recurring-blocks` | Cron (daily 3am UTC) | Top up recurring blocked slot series expiring within 14 days across all active shops; fallback to the manual extend UI. |
 
 ---
 
@@ -472,7 +483,7 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Slug | Per-shop unique slug for public booking URL | Allows white-label feel without custom domains |
 | Plan gating | Single `plan_type` field on `shops` | Simple, no extra tables, easy to extend |
 | Notification preferences | Separate `customer_notification_preferences` table (not columns on `customers`) | Keeps customers table clean; adding new channels (WhatsApp, SMS) is a targeted migration rather than widening a core table. WhatsApp and SMS columns exist from the start, defaulting to false, ready to activate when those integrations are built. |
-| Blocked slots recurrence | `recurrence_pattern` enum (`none/daily/weekly/fortnightly/monthly`) + `recurrence_id`, `recurrence_end_date`, `generated_until` columns added to `blocked_slots`. One-off admin UI built. Recurring UI next. |
+| Blocked slots recurrence | `recurrence_pattern` enum (`none/daily/weekly/fortnightly/monthly`) + `recurrence_id`, `recurrence_end_date`, `generated_until` columns on `blocked_slots`. Full recurring UI built: create/edit/delete with single vs. future scope, booking-conflict warning flow, expiry alerts on dashboard and blocked-slots page, manual extend action, and `extend-recurring-blocks` daily cron as fallback. |
 | Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
 | Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
 | Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |

@@ -47,7 +47,7 @@
   <!-- ── Profile section ──────────────────────────────── -->
   <section class="card">
     <h2 class="card__title">Profile</h2>
-
+    <p class="panel__subheading">Please keep your profile up to date so your service provider can contact you if needed.</p>
     <form
       method="POST"
       action="?/updateProfile"
@@ -114,7 +114,7 @@
   <!-- ── Notification preferences section ─────────────── -->
   <section class="card">
     <h2 class="card__title">Notification preferences</h2>
-
+    <p class="panel__subheading">Please note that not all reminders are offered by all service providers.</p>
     <form
       method="POST"
       action="?/updateNotifications"
@@ -418,6 +418,11 @@
   }
 
   .checkbox-row__hint {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .panel__subheading {
     font-size: var(--font-size-xs);
     color: var(--color-text-muted);
   }
