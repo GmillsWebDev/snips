@@ -5,6 +5,7 @@
   import Button from '$lib/components/ui/Button.svelte'
   import Toast from '$lib/components/ui/Toast.svelte'
   import ComingSoon from '$lib/components/ui/ComingSoon.svelte'
+  import ColourRow from '$lib/components/admin/ColourRow.svelte'
   import type { PageData, ActionData } from './$types'
 
   let { data, form }: { data: PageData; form: ActionData } = $props()
@@ -232,150 +233,54 @@
       <input type="hidden" name="color_on_primary"  value={'#' + hexOnPrimary} />
       <input type="hidden" name="color_on_secondary" value={'#' + hexOnSecondary} />
 
-      <!-- Primary colour -->
-      <div class="setting-row">
-        <div class="setting-row__info">
-          <span class="setting-row__label">Primary colour</span>
-          <span class="setting-row__desc">Main brand colour used across the booking flow</span>
-          {#if form?.brandingErrors?.color_primary}
-            <p class="field-error">{form.brandingErrors.color_primary}</p>
-          {/if}
-        </div>
-        <div class="colour-row__controls">
-          <input
-            type="color"
-            class="colour-picker"
-            bind:value={pickerPrimary}
-            oninput={(e) => { hexPrimary = (e.target as HTMLInputElement).value.slice(1) }}
-          />
-          <span class="colour-row__hash">#</span>
-          <input
-            type="text"
-            class="colour-hex"
-            class:colour-hex--error={form?.brandingErrors?.color_primary}
-            maxlength="6"
-            bind:value={hexPrimary}
-            oninput={(e) => {
-              const v = (e.target as HTMLInputElement).value
-              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerPrimary = '#' + v
-            }}
-          />
-        </div>
-      </div>
+      <ColourRow
+        label="Primary colour"
+        description="Main brand colour used across the site for buttons, booking screen and navigation bar"
+        error={form?.brandingErrors?.color_primary}
+        bind:pickerValue={pickerPrimary}
+        bind:hexValue={hexPrimary}
+      />
 
       <hr class="divider" />
 
-      <!-- Secondary colour -->
-      <div class="setting-row">
-        <div class="setting-row__info">
-          <span class="setting-row__label">Secondary colour</span>
-          <span class="setting-row__desc">Supporting brand colour used for accents and highlights</span>
-          {#if form?.brandingErrors?.color_secondary}
-            <p class="field-error">{form.brandingErrors.color_secondary}</p>
-          {/if}
-        </div>
-        <div class="colour-row__controls">
-          <input
-            type="color"
-            class="colour-picker"
-            bind:value={pickerSecondary}
-            oninput={(e) => { hexSecondary = (e.target as HTMLInputElement).value.slice(1) }}
-          />
-          <span class="colour-row__hash">#</span>
-          <input
-            type="text"
-            class="colour-hex"
-            class:colour-hex--error={form?.brandingErrors?.color_secondary}
-            maxlength="6"
-            bind:value={hexSecondary}
-            oninput={(e) => {
-              const v = (e.target as HTMLInputElement).value
-              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerSecondary = '#' + v
-            }}
-          />
-        </div>
-      </div>
+      <ColourRow
+        label="Text over primary colour"
+        description="Text and icon colour displayed on top of your primary colour"
+        error={form?.brandingErrors?.color_on_primary}
+        bind:pickerValue={pickerOnPrimary}
+        bind:hexValue={hexOnPrimary}
+      />
 
       <hr class="divider" />
 
-      <!-- Text on primary -->
-      <div class="setting-row">
-        <div class="setting-row__info">
-          <span class="setting-row__label">Text on primary</span>
-          <span class="setting-row__desc">Text and icon colour displayed on top of your primary colour</span>
-          {#if form?.brandingErrors?.color_on_primary}
-            <p class="field-error">{form.brandingErrors.color_on_primary}</p>
-          {/if}
-        </div>
-        <div class="colour-row__controls">
-          <input
-            type="color"
-            class="colour-picker"
-            bind:value={pickerOnPrimary}
-            oninput={(e) => { hexOnPrimary = (e.target as HTMLInputElement).value.slice(1) }}
-          />
-          <span class="colour-row__hash">#</span>
-          <input
-            type="text"
-            class="colour-hex"
-            class:colour-hex--error={form?.brandingErrors?.color_on_primary}
-            maxlength="6"
-            bind:value={hexOnPrimary}
-            oninput={(e) => {
-              const v = (e.target as HTMLInputElement).value
-              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerOnPrimary = '#' + v
-            }}
-          />
-        </div>
-      </div>
+      <ColourRow
+        label="Secondary colour"
+        description="Supporting brand colour used for accents, highlights and secondary buttons"
+        error={form?.brandingErrors?.color_secondary}
+        bind:pickerValue={pickerSecondary}
+        bind:hexValue={hexSecondary}
+      />
 
       <hr class="divider" />
 
-      <!-- Text on secondary -->
-      <div class="setting-row">
-        <div class="setting-row__info">
-          <span class="setting-row__label">Text on secondary</span>
-          <span class="setting-row__desc">Text and icon colour displayed on top of your secondary colour</span>
-          {#if form?.brandingErrors?.color_on_secondary}
-            <p class="field-error">{form.brandingErrors.color_on_secondary}</p>
-          {/if}
-        </div>
-        <div class="colour-row__controls">
-          <input
-            type="color"
-            class="colour-picker"
-            bind:value={pickerOnSecondary}
-            oninput={(e) => { hexOnSecondary = (e.target as HTMLInputElement).value.slice(1) }}
-          />
-          <span class="colour-row__hash">#</span>
-          <input
-            type="text"
-            class="colour-hex"
-            class:colour-hex--error={form?.brandingErrors?.color_on_secondary}
-            maxlength="6"
-            bind:value={hexOnSecondary}
-            oninput={(e) => {
-              const v = (e.target as HTMLInputElement).value
-              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerOnSecondary = '#' + v
-            }}
-          />
-        </div>
-      </div>
+      <ColourRow
+        label="Text over secondary colour"
+        description="Text and icon colour displayed on top of your secondary colour"
+        error={form?.brandingErrors?.color_on_secondary}
+        bind:pickerValue={pickerOnSecondary}
+        bind:hexValue={hexOnSecondary}
+      />
 
       <!-- Live preview -->
       <div class="branding-preview">
         <span class="branding-preview__label">Preview</span>
         <div class="branding-preview__buttons">
-          <button
-            type="button"
-            class="branding-preview__btn"
-            style="background-color: {pickerPrimary}; color: {pickerOnPrimary}"
-          >Book now</button>
-          <button
-            type="button"
-            class="branding-preview__btn"
-            style="background-color: {pickerSecondary}; color: {pickerOnSecondary}"
-          >View services</button>
+          <div style="pointer-events: none; --color-primary: {pickerPrimary}; --color-on-primary: {pickerOnPrimary}">
+            <Button type="button" variant="primary" edges="soft">Book now</Button>
+          </div>
+          <div style="pointer-events: none; --color-secondary: {pickerSecondary}; --color-on-secondary: {pickerOnSecondary}">
+            <Button type="button" variant="secondary" edges="soft">View services</Button>
+          </div>
         </div>
       </div>
 
@@ -605,54 +510,6 @@
     font-size: var(--font-size-sm);
   }
 
-  /* ── Colour rows ────────────────────────────────── */
-
-  .colour-row__controls {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  .colour-picker {
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 2px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: var(--color-bg);
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .colour-row__hash {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    user-select: none;
-  }
-
-  .colour-hex {
-    width: 5.5rem;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-family: monospace;
-    color: var(--color-text);
-    background: var(--color-bg);
-    transition: var(--transition);
-    letter-spacing: 0.05em;
-
-    &:focus {
-      outline: none;
-      border-color: var(--color-primary);
-    }
-
-    &--error {
-      border-color: var(--color-rejected-text);
-    }
-  }
-
   /* ── Branding preview ───────────────────────────── */
 
   .branding-preview {
@@ -678,16 +535,6 @@
     display: flex;
     gap: var(--space-3);
     flex-wrap: wrap;
-  }
-
-  .branding-preview__btn {
-    padding: var(--space-2) var(--space-5);
-    border: none;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: 500;
-    font-family: var(--font-sans);
-    pointer-events: none;
   }
 
   /* ── Toast ─────────────────────────────────────── */
