@@ -8,6 +8,7 @@
 		{ href: '/admin/services', label: 'Services', exact: false },
 		{ href: '/admin/schedule', label: 'Schedule', exact: false },
 		{ href: '/admin/blocked-slots', label: 'Blocked Slots', exact: false },
+		{ href: '/admin/settings', label: 'Settings', exact: false },
 	], brand = 'Snips' } = $props()
 </script>
 

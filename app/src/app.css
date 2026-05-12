@@ -13,12 +13,12 @@
   --color-brandsurface: #2e362c;
 
   /* Brand */
-  --color-primary: #0b0b92;
+  --color-primary: #2d5a27;
   --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
   --color-on-primary: #ffffff;
-  --color-secondary: #26b6bb;
+  --color-secondary: #8e4432;
   --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 75%, black);;
-  --color-on-secondary: #000000;
+  --color-on-secondary: #ffffff;
 
   --color-accent: #26b6bb;
 

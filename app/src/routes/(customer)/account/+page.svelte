@@ -2,6 +2,7 @@
   import { enhance } from '$app/forms'
   import Input from '$lib/components/ui/Input.svelte'
   import Button from '$lib/components/ui/Button.svelte'
+  import ComingSoon from '$lib/components/ui/ComingSoon.svelte'
   import type { PageData, ActionData } from './$types'
 
   let { data, form }: { data: PageData; form: ActionData } = $props()
@@ -162,7 +163,7 @@
         <div class="notif-channel notif-channel--coming-soon">
           <span class="notif-channel__name">
             WhatsApp
-            <span class="notif-channel__badge">Coming soon</span>
+            <ComingSoon />
           </span>
           <div class="checkboxes">
             <label class="checkbox-row">
@@ -196,7 +197,7 @@
         <div class="notif-channel notif-channel--coming-soon">
           <span class="notif-channel__name">
             SMS
-            <span class="notif-channel__badge">Coming soon</span>
+            <ComingSoon />
           </span>
           <div class="checkboxes">
             <label class="checkbox-row">
@@ -366,16 +367,6 @@
     font-size: var(--font-size-sm);
     font-weight: 600;
     color: var(--color-text);
-  }
-
-  .notif-channel__badge {
-    font-size: var(--font-size-xs);
-    font-weight: 500;
-    color: var(--color-text-muted);
-    background: var(--color-bg);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-full);
-    padding: 1px var(--space-2);
   }
 
   /* ── Checkboxes ───────────────────────────────────── */
