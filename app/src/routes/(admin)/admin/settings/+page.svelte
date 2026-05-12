@@ -10,7 +10,17 @@
   let { data, form }: { data: PageData; form: ActionData } = $props()
 
   let submitting = $state(false)
+  let brandingSubmitting = $state(false)
   let showToast = $state(false)
+
+  let pickerPrimary      = $state(data.branding.color_primary)
+  let hexPrimary         = $state(data.branding.color_primary.slice(1))
+  let pickerSecondary    = $state(data.branding.color_secondary)
+  let hexSecondary       = $state(data.branding.color_secondary.slice(1))
+  let pickerOnPrimary    = $state(data.branding.color_on_primary)
+  let hexOnPrimary       = $state(data.branding.color_on_primary.slice(1))
+  let pickerOnSecondary  = $state(data.branding.color_on_secondary)
+  let hexOnSecondary     = $state(data.branding.color_on_secondary.slice(1))
 
   $effect(() => {
     if ($page.url.searchParams.get('saved') !== '1') return
@@ -22,6 +32,17 @@
     if (!showToast) return
     const t = setTimeout(() => { showToast = false }, 5000)
     return () => clearTimeout(t)
+  })
+
+  $effect(() => {
+    pickerPrimary     = data.branding.color_primary
+    hexPrimary        = data.branding.color_primary.slice(1)
+    pickerSecondary   = data.branding.color_secondary
+    hexSecondary      = data.branding.color_secondary.slice(1)
+    pickerOnPrimary   = data.branding.color_on_primary
+    hexOnPrimary      = data.branding.color_on_primary.slice(1)
+    pickerOnSecondary = data.branding.color_on_secondary
+    hexOnSecondary    = data.branding.color_on_secondary.slice(1)
   })
 </script>
 
@@ -189,6 +210,185 @@
       </div>
       <input type="date" class="date-input" disabled />
     </div>
+  </section>
+
+  <!-- ── Section C: Branding ──────────────────────────── -->
+  <section class="settings-section">
+    <h2 class="settings-section__title">Branding</h2>
+
+    <form
+      method="POST"
+      action="?/updateBranding"
+      use:enhance={() => {
+        brandingSubmitting = true
+        return async ({ update }) => {
+          brandingSubmitting = false
+          await update()
+        }
+      }}
+    >
+      <input type="hidden" name="color_primary"     value={'#' + hexPrimary} />
+      <input type="hidden" name="color_secondary"   value={'#' + hexSecondary} />
+      <input type="hidden" name="color_on_primary"  value={'#' + hexOnPrimary} />
+      <input type="hidden" name="color_on_secondary" value={'#' + hexOnSecondary} />
+
+      <!-- Primary colour -->
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Primary colour</span>
+          <span class="setting-row__desc">Main brand colour used across the booking flow</span>
+          {#if form?.brandingErrors?.color_primary}
+            <p class="field-error">{form.brandingErrors.color_primary}</p>
+          {/if}
+        </div>
+        <div class="colour-row__controls">
+          <input
+            type="color"
+            class="colour-picker"
+            bind:value={pickerPrimary}
+            oninput={(e) => { hexPrimary = (e.target as HTMLInputElement).value.slice(1) }}
+          />
+          <span class="colour-row__hash">#</span>
+          <input
+            type="text"
+            class="colour-hex"
+            class:colour-hex--error={form?.brandingErrors?.color_primary}
+            maxlength="6"
+            bind:value={hexPrimary}
+            oninput={(e) => {
+              const v = (e.target as HTMLInputElement).value
+              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerPrimary = '#' + v
+            }}
+          />
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Secondary colour -->
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Secondary colour</span>
+          <span class="setting-row__desc">Supporting brand colour used for accents and highlights</span>
+          {#if form?.brandingErrors?.color_secondary}
+            <p class="field-error">{form.brandingErrors.color_secondary}</p>
+          {/if}
+        </div>
+        <div class="colour-row__controls">
+          <input
+            type="color"
+            class="colour-picker"
+            bind:value={pickerSecondary}
+            oninput={(e) => { hexSecondary = (e.target as HTMLInputElement).value.slice(1) }}
+          />
+          <span class="colour-row__hash">#</span>
+          <input
+            type="text"
+            class="colour-hex"
+            class:colour-hex--error={form?.brandingErrors?.color_secondary}
+            maxlength="6"
+            bind:value={hexSecondary}
+            oninput={(e) => {
+              const v = (e.target as HTMLInputElement).value
+              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerSecondary = '#' + v
+            }}
+          />
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Text on primary -->
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Text on primary</span>
+          <span class="setting-row__desc">Text and icon colour displayed on top of your primary colour</span>
+          {#if form?.brandingErrors?.color_on_primary}
+            <p class="field-error">{form.brandingErrors.color_on_primary}</p>
+          {/if}
+        </div>
+        <div class="colour-row__controls">
+          <input
+            type="color"
+            class="colour-picker"
+            bind:value={pickerOnPrimary}
+            oninput={(e) => { hexOnPrimary = (e.target as HTMLInputElement).value.slice(1) }}
+          />
+          <span class="colour-row__hash">#</span>
+          <input
+            type="text"
+            class="colour-hex"
+            class:colour-hex--error={form?.brandingErrors?.color_on_primary}
+            maxlength="6"
+            bind:value={hexOnPrimary}
+            oninput={(e) => {
+              const v = (e.target as HTMLInputElement).value
+              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerOnPrimary = '#' + v
+            }}
+          />
+        </div>
+      </div>
+
+      <hr class="divider" />
+
+      <!-- Text on secondary -->
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Text on secondary</span>
+          <span class="setting-row__desc">Text and icon colour displayed on top of your secondary colour</span>
+          {#if form?.brandingErrors?.color_on_secondary}
+            <p class="field-error">{form.brandingErrors.color_on_secondary}</p>
+          {/if}
+        </div>
+        <div class="colour-row__controls">
+          <input
+            type="color"
+            class="colour-picker"
+            bind:value={pickerOnSecondary}
+            oninput={(e) => { hexOnSecondary = (e.target as HTMLInputElement).value.slice(1) }}
+          />
+          <span class="colour-row__hash">#</span>
+          <input
+            type="text"
+            class="colour-hex"
+            class:colour-hex--error={form?.brandingErrors?.color_on_secondary}
+            maxlength="6"
+            bind:value={hexOnSecondary}
+            oninput={(e) => {
+              const v = (e.target as HTMLInputElement).value
+              if (/^[A-Fa-f0-9]{6}$|^[A-Fa-f0-9]{3}$/.test(v)) pickerOnSecondary = '#' + v
+            }}
+          />
+        </div>
+      </div>
+
+      <!-- Live preview -->
+      <div class="branding-preview">
+        <span class="branding-preview__label">Preview</span>
+        <div class="branding-preview__buttons">
+          <button
+            type="button"
+            class="branding-preview__btn"
+            style="background-color: {pickerPrimary}; color: {pickerOnPrimary}"
+          >Book now</button>
+          <button
+            type="button"
+            class="branding-preview__btn"
+            style="background-color: {pickerSecondary}; color: {pickerOnSecondary}"
+          >View services</button>
+        </div>
+      </div>
+
+      {#if form?.brandingErrors?.form}
+        <p class="form-error">{form.brandingErrors.form}</p>
+      {/if}
+
+      <div class="settings-section__footer">
+        <Button type="submit" edges="soft" disabled={brandingSubmitting} loading={brandingSubmitting}>
+          {brandingSubmitting ? 'Saving…' : 'Save branding'}
+        </Button>
+      </div>
+    </form>
   </section>
 </div>
 
@@ -403,6 +603,91 @@
     color: var(--color-rejected-text);
     border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
+  }
+
+  /* ── Colour rows ────────────────────────────────── */
+
+  .colour-row__controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+  }
+
+  .colour-picker {
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 2px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .colour-row__hash {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    user-select: none;
+  }
+
+  .colour-hex {
+    width: 5.5rem;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: monospace;
+    color: var(--color-text);
+    background: var(--color-bg);
+    transition: var(--transition);
+    letter-spacing: 0.05em;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &--error {
+      border-color: var(--color-rejected-text);
+    }
+  }
+
+  /* ── Branding preview ───────────────────────────── */
+
+  .branding-preview {
+    margin-top: var(--space-6);
+    padding: var(--space-4);
+    background: var(--color-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .branding-preview__label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .branding-preview__buttons {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .branding-preview__btn {
+    padding: var(--space-2) var(--space-5);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    font-family: var(--font-sans);
+    pointer-events: none;
   }
 
   /* ── Toast ─────────────────────────────────────── */
