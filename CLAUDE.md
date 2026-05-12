@@ -294,6 +294,35 @@ else { /* result.data contains the fail() payload */ }
 
 Without this header, successful actions return a 303 redirect which `fetch` follows silently and you lose the action data.
 
+### Pre-submit validation with `use:enhance`
+
+To intercept a form submission before it reaches the server (e.g. a contrast warning), use the `cancel()` callback inside the enhance function. Call `formEl.requestSubmit()` to re-trigger the submit event once the user confirms:
+
+```typescript
+let formEl: HTMLFormElement | null = null
+let showWarning = $state(false)
+let bypass = $state(false)
+```
+
+```svelte
+<form bind:this={formEl} method="POST" use:enhance={({ cancel }) => {
+  if (!bypass && someConditionFails) {
+    cancel()
+    showWarning = true
+    return
+  }
+  bypass = false
+  // ... return async ({ update }) => { ... }
+}}>
+```
+
+```svelte
+<!-- "Confirm" button in the warning UI -->
+<button onclick={() => { bypass = true; formEl?.requestSubmit() }}>Confirm</button>
+```
+
+`cancel()` prevents both the HTTP request and the SvelteKit navigation. `requestSubmit()` fires a new `submit` event which `use:enhance` catches again.
+
 ### Non-reactive DOM refs in loops
 
 When you need element references inside `{#each}` but don't need reactivity on the refs themselves, use a plain object (not `$state`) with `bind:this`:
@@ -385,7 +414,7 @@ Steps completed through build checklist:
 - [x] 6.1 Service CRUD
 - [x] 6.2 Availability rules (per barber, per day of week, split shifts)
 - [x] 6.3 Blocked slots UI (one-off full day, custom range, recurring breaks, expiry alerts, auto-extend cron)
-- [~] 6.4 Shop settings — schema done, UI next
+- [x] 6.4 Shop settings — UI complete (booking preferences form, branding section with contrast checker)
 - [ ] 7+ — Notifications, polish, multi-barber, payments
 
 ---
@@ -409,6 +438,39 @@ Steps completed through build checklist:
 - When querying `buffer_minutes` in edge functions, embed via `shop:shops(timezone, shop_preferences(buffer_minutes))` and access as `barber?.shop?.shop_preferences?.buffer_minutes`
 - When querying brand colour for the admin dashboard, query `client_branding.color_primary` directly — not `shops.brand_colour`
 - `getShopPreferences` pattern: use a direct `.from('shop_preferences').select(...).eq('shop_id', shopId).single()` in server load functions
+
+### client_branding Columns
+
+`client_branding` has four colour columns — all stored as full hex strings with `#` prefix, constrained to `^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`:
+
+| Column | Purpose |
+|---|---|
+| `color_primary` | Main brand colour (buttons, nav, booking screen) |
+| `color_secondary` | Accent / secondary button colour |
+| `color_on_primary` | Text/icon colour rendered on top of `color_primary` |
+| `color_on_secondary` | Text/icon colour rendered on top of `color_secondary` |
+
+The `create_shop_defaults()` trigger seeds all four columns. The admin settings page validates and normalises 3-digit shorthand (e.g. `#fff` → `#ffffff`) before writing.
+
+### Shop Settings UI
+
+- Lives at a single `/admin/settings` page (not sub-routes), with three sections: Booking Preferences, Display Settings (all coming-soon), and Branding
+- Server actions: `?/updatePreferences` (validates `booking_window_days` 1–365 and `buffer_minutes` 0–120) and `?/updateBranding` (validates all four hex colours, normalises 3→6 digit)
+- Success redirects to `?saved=1`; page detects the param, sets `showToast`, calls `goto(..., { replaceState: true })` to strip it, and auto-dismisses after 5 s — this is the standard toast pattern for form actions across the admin
+- `ColourRow.svelte` (`$lib/components/admin/`) — reusable colour row: colour picker + `#` + hex text input, bidirectionally synced via `$bindable` props (`pickerValue` and `hexValue`)
+- `ComingSoon.svelte` (`$lib/components/ui/`) — small pill badge for unbuilt features; renders inline in labels
+- CSS custom property override for preview: wrap `<Button>` in `<div style="--color-primary: {picker}; ...">` — the custom property cascades through Svelte's scoped styles so Button picks it up without needing a `style` prop
+
+### WCAG Contrast Utility
+
+`$lib/utils/contrast.ts` — four exports:
+
+- `hexToLinearRgb(hex)` — strips `#`, expands 3-digit shorthand, returns `[r, g, b]` linearised sRGB
+- `getLuminance([r, g, b])` — WCAG 2.1 relative luminance
+- `getContrastRatio(hex1, hex2)` — `(lighter + 0.05) / (darker + 0.05)`, always ≥ 1
+- `getContrastRating(ratio)` — returns `ContrastRating`: `{ level: 'fail' | 'aa-large' | 'aa', label, detail, pass }`. `pass` is `true` only at ≥ 4.5:1 (AA for normal text). Thresholds: < 3 = fail, 3–4.49 = aa-large (large text only), ≥ 4.5 = aa
+
+Used in the branding settings section to show live ratio, badge, and detail text, and to gate save with a soft warning when either colour pair fails.
 
 ### Blocked Slots
 

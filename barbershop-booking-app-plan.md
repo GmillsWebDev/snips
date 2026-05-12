@@ -86,6 +86,19 @@ created_at            timestamptz
 updated_at            timestamptz           -- auto-updated via handle_updated_at() trigger
 ```
 
+### `client_branding`
+```sql
+id                 uuid PK
+shop_id            uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+color_primary      text NOT NULL DEFAULT '#2d5a27'   -- main brand colour
+color_secondary    text NOT NULL DEFAULT '#8e4432'   -- accent / secondary colour
+color_on_primary   text NOT NULL DEFAULT '#ffffff'   -- text on primary background
+color_on_secondary text NOT NULL DEFAULT '#ffffff'   -- text on secondary background
+-- CHECK: all four columns match ^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$
+```
+
+> All four colour columns are full hex strings with `#` prefix. The admin branding settings page validates and normalises 3-digit shorthand before writing. A WCAG AA contrast checker (`$lib/utils/contrast.ts`) warns the admin when either colour pair falls below 4.5:1.
+
 ### `barbers`
 ```sql
 id          uuid PK
@@ -324,10 +337,8 @@ src/routes/
 │   ├── analytics/                 Charts: bookings, revenue, no-shows
 │   ├── notifications/             Email template preview + history
 │   ├── discount-codes/            CRUD discount codes
-│   └── settings/
-│       ├── shop/                  Name, slug, logo, brand colour
-│       ├── booking/               Auto-accept toggle, buffer, window, deposit
-│       └── billing/               Plan management (future Stripe)
+│   └── settings/                  Single page: booking prefs + display settings + branding
+│       └── billing/               Plan management (future Stripe — not yet built)
 ```
 
 ---
@@ -510,6 +521,9 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
 | Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
 | Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |
+| `client_branding` extended | Added `color_on_primary` + `color_on_secondary` columns (text, not null, default `#ffffff`); added hex check constraints on all four colour columns; `create_shop_defaults()` trigger updated to seed all four. Migration: `20260512000000_client_branding_on_colours.sql`. | Needed to properly support accessible colour-on-colour contrast without guessing the text colour from the background. |
+| Admin settings page — single route | Implemented as one `/admin/settings` page with three sections (Booking Preferences, Display Settings, Branding), not sub-routes as originally planned. Two form actions: `?/updatePreferences` and `?/updateBranding`. | Sub-routes would have been over-engineering for the current feature set; a single page with clearly labelled sections is simpler and still extensible. |
+| WCAG contrast utility | `$lib/utils/contrast.ts` provides `hexToLinearRgb`, `getLuminance`, `getContrastRatio`, `getContrastRating`. Thresholds: < 3:1 = Fail, 3–4.49:1 = AA Large, ≥ 4.5:1 = AA Pass. Used in the branding section live preview. A soft pre-submit warning fires (with bypass) when either colour pair fails 4.5:1. | Button label text is normal-sized so 4.5:1 is the relevant threshold. Warning is soft (not blocking) so the admin can override if their design intent is deliberate. |
 
 ---
 
