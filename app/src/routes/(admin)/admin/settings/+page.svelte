@@ -6,6 +6,7 @@
   import Toast from '$lib/components/ui/Toast.svelte'
   import ComingSoon from '$lib/components/ui/ComingSoon.svelte'
   import ColourRow from '$lib/components/admin/ColourRow.svelte'
+  import { getContrastRatio, getContrastRating } from '$lib/utils/contrast'
   import type { PageData, ActionData } from './$types'
 
   let { data, form }: { data: PageData; form: ActionData } = $props()
@@ -22,6 +23,15 @@
   let hexOnPrimary       = $state(data.branding.color_on_primary.slice(1))
   let pickerOnSecondary  = $state(data.branding.color_on_secondary)
   let hexOnSecondary     = $state(data.branding.color_on_secondary.slice(1))
+
+  let showContrastWarning = $state(false)
+  let bypassWarning = $state(false)
+  let brandingFormEl: HTMLFormElement | null = null
+
+  let ratioPrimary   = $derived(getContrastRatio(pickerPrimary, pickerOnPrimary))
+  let ratioSecondary = $derived(getContrastRatio(pickerSecondary, pickerOnSecondary))
+  let contrastPrimary   = $derived(getContrastRating(ratioPrimary))
+  let contrastSecondary = $derived(getContrastRating(ratioSecondary))
 
   $effect(() => {
     if ($page.url.searchParams.get('saved') !== '1') return
@@ -220,10 +230,18 @@
     <form
       method="POST"
       action="?/updateBranding"
-      use:enhance={() => {
+      bind:this={brandingFormEl}
+      use:enhance={({ cancel }) => {
+        if (!bypassWarning && (!contrastPrimary.pass || !contrastSecondary.pass)) {
+          cancel()
+          showContrastWarning = true
+          return
+        }
         brandingSubmitting = true
+        bypassWarning = false
         return async ({ update }) => {
           brandingSubmitting = false
+          showContrastWarning = false
           await update()
         }
       }}
@@ -273,19 +291,58 @@
 
       <!-- Live preview -->
       <div class="branding-preview">
-        <span class="branding-preview__label">Preview</span>
+        <span class="branding-preview__label">Preview &amp; Accessibility Check</span>
         <div class="branding-preview__buttons">
-          <div style="pointer-events: none; --color-primary: {pickerPrimary}; --color-on-primary: {pickerOnPrimary}">
-            <Button type="button" variant="primary" edges="soft">Book now</Button>
+          <div class="branding-preview__pair">
+            <div style="pointer-events: none; --color-primary: {pickerPrimary}; --color-on-primary: {pickerOnPrimary}">
+              <Button type="button" variant="primary" edges="soft">Book now</Button>
+            </div>
+            <div class="contrast-info">
+              <span class="contrast-info__ratio">{ratioPrimary.toFixed(2)}:1</span>
+              <span class="contrast-badge contrast-badge--{contrastPrimary.level}">{contrastPrimary.label}</span>
+              <span class="contrast-info__detail">{contrastPrimary.detail}</span>
+            </div>
           </div>
-          <div style="pointer-events: none; --color-secondary: {pickerSecondary}; --color-on-secondary: {pickerOnSecondary}">
-            <Button type="button" variant="secondary" edges="soft">View services</Button>
+          <div class="branding-preview__pair">
+            <div style="pointer-events: none; --color-secondary: {pickerSecondary}; --color-on-secondary: {pickerOnSecondary}">
+              <Button type="button" variant="secondary" edges="soft">View services</Button>
+            </div>
+            <div class="contrast-info">
+              <span class="contrast-info__ratio">{ratioSecondary.toFixed(2)}:1</span>
+              <span class="contrast-badge contrast-badge--{contrastSecondary.level}">{contrastSecondary.label}</span>
+              <span class="contrast-info__detail">{contrastSecondary.detail}</span>
+            </div>
           </div>
         </div>
       </div>
 
       {#if form?.brandingErrors?.form}
         <p class="form-error">{form.brandingErrors.form}</p>
+      {/if}
+
+      {#if showContrastWarning}
+        <div class="contrast-warning">
+          <p class="contrast-warning__text">
+            One or more colour pairs don't meet WCAG AA contrast (4.5:1) for normal text.
+            Affected users may have difficulty reading button labels.
+          </p>
+          <div class="contrast-warning__actions">
+            <Button
+              type="button"
+              edges="soft"
+              onclick={() => { bypassWarning = true; brandingFormEl?.requestSubmit() }}
+            >
+              Save anyway
+            </Button>
+            <button
+              type="button"
+              class="contrast-warning__dismiss"
+              onclick={() => { showContrastWarning = false }}
+            >
+              Go back and adjust
+            </button>
+          </div>
+        </div>
       {/if}
 
       <div class="settings-section__footer">
@@ -546,5 +603,100 @@
     transform: translateX(-50%);
     z-index: 100;
     pointer-events: none;
+  }
+
+  /* ── Contrast info (below each preview button) ─ */
+
+  .branding-preview__buttons {
+    align-items: flex-start;
+  }
+
+  .branding-preview__pair {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .contrast-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .contrast-info__ratio {
+    font-size: var(--font-size-xs);
+    font-family: monospace;
+    color: var(--color-text);
+    font-weight: 600;
+  }
+
+  .contrast-info__detail {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    display: block;
+    width: 100%;
+  }
+
+  .contrast-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-full);
+
+    &--aa {
+      background: var(--color-accepted-bg);
+      color: var(--color-accepted-text);
+    }
+
+    &--aa-large {
+      background: var(--color-pending-bg);
+      color: var(--color-pending-text);
+    }
+
+    &--fail {
+      background: var(--color-rejected-bg);
+      color: var(--color-rejected-text);
+    }
+  }
+
+  /* ── Contrast warning ───────────────────────── */
+
+  .contrast-warning {
+    margin-top: var(--space-4);
+    padding: var(--space-4);
+    background: var(--color-pending-bg);
+    border: 1px solid var(--color-pending-text);
+    border-radius: var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .contrast-warning__text {
+    font-size: var(--font-size-sm);
+    color: var(--color-pending-text);
+    line-height: 1.5;
+  }
+
+  .contrast-warning__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .contrast-warning__dismiss {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+
+    &:hover {
+      color: var(--color-text);
+    }
   }
 </style>
