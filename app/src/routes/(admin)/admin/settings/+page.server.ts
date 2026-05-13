@@ -32,7 +32,7 @@ const HEX_RE = /^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/
 function normalizeHex(raw: string): string {
   const v = raw.toLowerCase()
   if (v.length === 4) {
-    return '#' + v[1] + v[1] + v[2] + v[2] + v[3] + v[3]
+    return `#${v[1]}${v[1]}${v[2]}${v[2]}${v[3]}${v[3]}`
   }
   return v
 }

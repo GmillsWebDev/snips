@@ -77,6 +77,6 @@ export const actions: Actions = {
       return fail(500, { error: 'Failed to create service. Please try again.' })
     }
 
-    redirect(303, '/admin/services')
+    return redirect(303, '/admin/services')
   },
 }

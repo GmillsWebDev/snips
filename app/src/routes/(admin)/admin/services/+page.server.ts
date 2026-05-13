@@ -181,6 +181,6 @@ export const actions: Actions = {
 
     if (restoreErr) return fail(500, { restoreError: 'Failed to restore service.' })
 
-    redirect(303, '/admin/services?showDeleted=true')
+    return redirect(303, '/admin/services?showDeleted=true')
   },
 }

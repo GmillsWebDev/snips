@@ -91,6 +91,6 @@ export const actions: Actions = {
       return fail(500, { error: 'Failed to update service. Please try again.' })
     }
 
-    redirect(303, '/admin/services')
+    return redirect(303, '/admin/services')
   },
 }

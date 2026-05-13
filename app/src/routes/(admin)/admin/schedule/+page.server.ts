@@ -30,7 +30,7 @@ function londonDayOfWeek(isoString: string): number {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date(isoString))
-  return new Date(londonDate + 'T12:00:00Z').getUTCDay()
+  return new Date(`${londonDate}T12:00:00Z`).getUTCDay()
 }
 
 export const load: PageServerLoad = async ({ parent }) => {

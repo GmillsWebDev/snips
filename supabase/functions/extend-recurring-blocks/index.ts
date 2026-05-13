@@ -51,7 +51,7 @@ function computeLimitDate(endDate: string | null): Date {
   const cap = new Date();
   cap.setMonth(cap.getMonth() + 18);
   if (!endDate) return cap;
-  const d = new Date(endDate + "T23:59:59");
+  const d = new Date(`${endDate}T23:59:59`);
   return d < cap ? d : cap;
 }
 

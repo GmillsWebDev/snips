@@ -132,7 +132,7 @@ function computeLimitDate(endDate: string | null): Date {
   const cap = new Date()
   cap.setMonth(cap.getMonth() + 18)
   if (!endDate) return cap
-  const d = new Date(endDate + 'T23:59:59')
+  const d = new Date(`${endDate}T23:59:59`)
   return d < cap ? d : cap
 }
 
@@ -352,6 +352,114 @@ async function runCreateRecurring(request: Request, locals: App.Locals, skipChec
   return { created: true }
 }
 
+type UpdateWarningData = {
+  blockId: string
+  scope: string
+  startTime: string
+  endTime: string
+  reason: string
+  endDate: string | null
+}
+
+async function checkBookingConflicts(
+  admin: AdminClient,
+  barberId: string,
+  startIso: string,
+  endIso: string,
+): Promise<{ ok: false } | { ok: true; count: number }> {
+  const { data, error } = await admin
+    .from('bookings')
+    .select('id')
+    .eq('barber_id', barberId)
+    .not('status', 'in', '(cancelled,rejected,completed,no_show)')
+    .gte('start_at', startIso)
+    .lt('start_at', endIso)
+  if (error) return { ok: false }
+  return { ok: true, count: data?.length ?? 0 }
+}
+
+async function applySingleUpdate(
+  admin: AdminClient,
+  barberId: string,
+  blockId: string,
+  occurrenceDate: string,
+  startTime: string,
+  endTime: string,
+  reason: string,
+  skipCheck: boolean,
+  warningData: UpdateWarningData,
+) {
+  const newStartUtc = londonToUtc(occurrenceDate, startTime)
+  const newEndUtc = londonToUtc(occurrenceDate, endTime)
+
+  if (!skipCheck) {
+    const conflicts = await checkBookingConflicts(admin, barberId, newStartUtc.toISOString(), newEndUtc.toISOString())
+    if (!conflicts.ok) return fail(500, { formError: 'Failed to check upcoming bookings' })
+    if (conflicts.count > 0) return fail(409, { warning: true, count: conflicts.count, formData: warningData })
+  }
+
+  const { error: updateErr } = await admin
+    .from('blocked_slots')
+    .update({
+      start_at: newStartUtc.toISOString(),
+      end_at: newEndUtc.toISOString(),
+      reason: reason || null,
+    })
+    .eq('id', blockId)
+
+  if (updateErr) return fail(500, { formError: 'Failed to update blocked slot' })
+  return redirect(303, '/admin/blocked-slots')
+}
+
+async function applyFutureUpdate(
+  admin: AdminClient,
+  barberId: string,
+  block: { start_at: string; recurrence_id: string; recurrence_pattern: string; recurrence_end_date: string | null },
+  occurrenceDate: string,
+  startTime: string,
+  endTime: string,
+  reason: string,
+  endDate: string | null,
+  skipCheck: boolean,
+  warningData: UpdateWarningData,
+) {
+  const recurrenceId = block.recurrence_id
+  const seriesEndDate = endDate ?? block.recurrence_end_date ?? null
+
+  const newRows = buildOccurrenceRows(
+    barberId,
+    recurrenceId,
+    block.recurrence_pattern as RecurrencePattern,
+    occurrenceDate,
+    startTime,
+    endTime,
+    reason,
+    seriesEndDate,
+  )
+
+  if (!skipCheck && newRows.length > 0) {
+    const conflicts = await checkBookingConflicts(admin, barberId, newRows[0].start_at, newRows[newRows.length - 1].end_at)
+    if (!conflicts.ok) return fail(500, { formError: 'Failed to check upcoming bookings' })
+    if (conflicts.count > 0) return fail(409, { warning: true, count: conflicts.count, formData: warningData })
+  }
+
+  const { error: deleteErr } = await admin
+    .from('blocked_slots')
+    .delete()
+    .eq('recurrence_id', recurrenceId)
+    .gte('start_at', block.start_at)
+
+  if (deleteErr) return fail(500, { formError: 'Failed to update recurring series' })
+
+  if (newRows.length > 0) {
+    const { error: insertErr } = await admin.from('blocked_slots').insert(newRows)
+    if (insertErr) return fail(500, { formError: 'Failed to insert updated occurrences' })
+  }
+
+  await syncGeneratedUntil(admin, recurrenceId)
+  return redirect(303, '/admin/blocked-slots')
+}
+
 async function runUpdateOccurrence(request: Request, locals: App.Locals, skipCheck: boolean) {
   const { user } = await locals.safeGetSession()
   if (!user) return fail(403, { formError: 'Not authenticated' })
@@ -401,93 +509,12 @@ async function runUpdateOccurrence(request: Request, locals: App.Locals, skipChe
   if (!block.recurrence_id) return fail(400, { formError: 'Block is not part of a recurring series' })
 
   const occurrenceDate = utcToLondonDateStr(block.start_at)
-  const newStartUtc = londonToUtc(occurrenceDate, startTime)
-  const newEndUtc = londonToUtc(occurrenceDate, endTime)
+  const warningData: UpdateWarningData = { blockId, scope, startTime, endTime, reason, endDate }
 
   if (scope === 'single') {
-    if (!skipCheck) {
-      const { data: upcoming, error: bookingsErr } = await admin
-        .from('bookings')
-        .select('id')
-        .eq('barber_id', barber.id)
-        .not('status', 'in', '(cancelled,rejected,completed,no_show)')
-        .gte('start_at', newStartUtc.toISOString())
-        .lt('start_at', newEndUtc.toISOString())
-
-      if (bookingsErr) return fail(500, { formError: 'Failed to check upcoming bookings' })
-
-      if (upcoming && upcoming.length > 0) {
-        return fail(409, {
-          warning: true,
-          count: upcoming.length,
-          formData: { blockId, scope, startTime, endTime, reason, endDate },
-        })
-      }
-    }
-
-    const { error: updateErr } = await admin
-      .from('blocked_slots')
-      .update({
-        start_at: newStartUtc.toISOString(),
-        end_at: newEndUtc.toISOString(),
-        reason: reason || null,
-      })
-      .eq('id', blockId)
-
-    if (updateErr) return fail(500, { formError: 'Failed to update blocked slot' })
-    redirect(303, '/admin/blocked-slots')
+    return applySingleUpdate(admin, barber.id, blockId, occurrenceDate, startTime, endTime, reason, skipCheck, warningData)
   }
-
-  // scope === 'future'
-  const recurrenceId = block.recurrence_id
-  const seriesEndDate = endDate ?? block.recurrence_end_date ?? null
-
-  const newRows = buildOccurrenceRows(
-    barber.id,
-    recurrenceId,
-    block.recurrence_pattern as RecurrencePattern,
-    occurrenceDate,
-    startTime,
-    endTime,
-    reason,
-    seriesEndDate,
-  )
-
-  if (!skipCheck && newRows.length > 0) {
-    const { data: upcoming, error: bookingsErr } = await admin
-      .from('bookings')
-      .select('id')
-      .eq('barber_id', barber.id)
-      .not('status', 'in', '(cancelled,rejected,completed,no_show)')
-      .gte('start_at', newRows[0].start_at)
-      .lt('start_at', newRows[newRows.length - 1].end_at)
-
-    if (bookingsErr) return fail(500, { formError: 'Failed to check upcoming bookings' })
-
-    if (upcoming && upcoming.length > 0) {
-      return fail(409, {
-        warning: true,
-        count: upcoming.length,
-        formData: { blockId, scope, startTime, endTime, reason, endDate },
-      })
-    }
-  }
-
-  const { error: deleteErr } = await admin
-    .from('blocked_slots')
-    .delete()
-    .eq('recurrence_id', recurrenceId)
-    .gte('start_at', block.start_at)
-
-  if (deleteErr) return fail(500, { formError: 'Failed to update recurring series' })
-
-  if (newRows.length > 0) {
-    const { error: insertErr } = await admin.from('blocked_slots').insert(newRows)
-    if (insertErr) return fail(500, { formError: 'Failed to insert updated occurrences' })
-  }
-
-  await syncGeneratedUntil(admin, recurrenceId)
-  redirect(303, '/admin/blocked-slots')
+  return applyFutureUpdate(admin, barber.id, block, occurrenceDate, startTime, endTime, reason, endDate, skipCheck, warningData)
 }
 
 export const load: PageServerLoad = async ({ parent }) => {
@@ -685,12 +712,12 @@ export const actions: Actions = {
 
     if (deleteErr) return fail(500, { deleteError: 'Failed to delete blocked slot' })
 
-    redirect(303, '/admin/blocked-slots')
+    return redirect(303, '/admin/blocked-slots')
   },
 
-  createRecurring: async ({ request, locals }) => runCreateRecurring(request, locals, false),
+  createRecurring: ({ request, locals }) => runCreateRecurring(request, locals, false),
 
-  createRecurringConfirmed: async ({ request, locals }) => runCreateRecurring(request, locals, true),
+  createRecurringConfirmed: ({ request, locals }) => runCreateRecurring(request, locals, true),
 
   deleteOccurrence: async ({ request, locals }) => {
     const { user } = await locals.safeGetSession()
@@ -745,7 +772,7 @@ export const actions: Actions = {
       await syncGeneratedUntil(admin, block.recurrence_id)
     }
 
-    redirect(303, '/admin/blocked-slots')
+    return redirect(303, '/admin/blocked-slots')
   },
 
   updateOccurrence: async ({ request, locals }) => runUpdateOccurrence(request, locals, false),
