@@ -378,6 +378,48 @@ Read the refs inside callbacks (e.g. `setTimeout`, event handlers) — they'll b
 
 ---
 
+## Linting Rules
+
+The automated PR checker enforces these. Violations will fail the check.
+
+### Always `return redirect(...)`
+Never call `redirect()` bare — the linter cannot see that it throws and flags the function as missing a return value (JS-0045):
+
+```typescript
+// ✅ Correct
+return redirect(303, '/admin/somewhere')
+
+// ❌ Wrong — triggers JS-0045
+redirect(303, '/admin/somewhere')
+```
+
+### Use template literals for string interpolation
+Never use `+` to concatenate a variable into a string — use template literals (JS-0246):
+
+```typescript
+// ✅ Correct
+const d = new Date(`${endDate}T23:59:59`)
+
+// ❌ Wrong — triggers JS-0246
+const d = new Date(endDate + 'T23:59:59')
+```
+
+### Don't mark shorthand action delegates as `async`
+When a form action just delegates to another async function, omit `async` — the wrapper itself has no `await` and triggers JS-0116:
+
+```typescript
+// ✅ Correct
+createFoo: ({ request, locals }) => runCreateFoo(request, locals, false),
+
+// ❌ Wrong — triggers JS-0116
+createFoo: async ({ request, locals }) => runCreateFoo(request, locals, false),
+```
+
+### Keep cyclomatic complexity low (JS-R1005)
+Functions with many branches (> ~15 decision points) are flagged as very-high risk. When an action handler grows complex, split it: one function for auth + validation + lookup, separate helpers for each logical path (e.g. `applySingleUpdate` / `applyFutureUpdate`). The dispatcher stays simple; each helper handles one case.
+
+---
+
 ## What NOT to Do
 
 - ❌ Do not use Tailwind classes
@@ -391,6 +433,9 @@ Read the refs inside callbacks (e.g. `setTimeout`, event handlers) — they'll b
 - ❌ Do not do auth checks in `.svelte` files — use server load functions
 - ❌ Do not import `$lib/server/*` in browser/component files
 - ❌ Do not destructure `data` from `$props()` in page components — reference `data.x` directly so same-route navigations re-render correctly
+- ❌ Do not call bare `redirect()` — always `return redirect(...)` (JS-0045)
+- ❌ Do not use `+` for string interpolation — always use template literals (JS-0246)
+- ❌ Do not mark shorthand action delegates `async` if the wrapper has no `await` (JS-0116)
 
 ---
 
