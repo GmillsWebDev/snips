@@ -1,5 +1,6 @@
 import type { PageServerLoad } from './$types'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
+import { getExpiringRecurrences } from '$lib/server/getExpiringRecurrences'
 
 function getLondonDayBounds(): { dayStart: string; dayEnd: string } {
   const now = new Date()
@@ -28,8 +29,8 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
   const admin = createSupabaseAdminClient()
   const { dayStart, dayEnd } = getLondonDayBounds()
 
-  const [shopResult, bookingsResult, pendingResult] = await Promise.all([
-    admin.from('shops').select('brand_colour').eq('id', shopId).single(),
+  const [brandingResult, bookingsResult, pendingResult, expiringRecurrences] = await Promise.all([
+    admin.from('client_branding').select('color_primary').eq('shop_id', shopId).maybeSingle(),
     admin
       .from('bookings')
       .select(`
@@ -56,6 +57,7 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
       .eq('status', 'pending')
       .gte('start_at', new Date().toISOString())
       .order('start_at'),
+    getExpiringRecurrences(shopId, admin),
   ])
 
   if (bookingsResult.error) throw bookingsResult.error
@@ -102,6 +104,7 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
       completed: raw.filter(b => b.status === 'completed').length,
     },
     needsAttention,
-    brandColour: shopResult.data?.brand_colour ?? null,
+    expiringRecurrences,
+    brandColour: brandingResult.data?.color_primary ?? null,
   }
 }

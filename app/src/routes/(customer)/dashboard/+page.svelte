@@ -9,17 +9,26 @@
 
   const PAGE_SIZE = 3
   let visibleCount = $state(PAGE_SIZE)
+  let visiblePastCount = $state(PAGE_SIZE)
 
   const visibleUpcoming = $derived(data.upcomingBookings.slice(0, visibleCount))
   const hasMore = $derived(visibleCount < data.upcomingBookings.length)
 
+  const visiblePast = $derived(data.pastBookings.slice(0, visiblePastCount))
+  const hasPastMore = $derived(visiblePastCount < data.pastBookings.length)
+
   function switchTab(tab: Tab) {
     activeTab = tab
     visibleCount = PAGE_SIZE
+    visiblePastCount = PAGE_SIZE
   }
 
   function showMore() {
     visibleCount += PAGE_SIZE
+  }
+
+  function showMorePast() {
+    visiblePastCount += PAGE_SIZE
   }
 
   function formatPrice(pence: number): string {
@@ -112,7 +121,7 @@
       </div>
     {:else}
       <ul class="bookings">
-        {#each data.pastBookings as booking (booking.id)}
+        {#each visiblePast as booking (booking.id)}
           <li class="booking-card booking-card--compact">
             <div class="booking-card__top">
               <span class="booking-card__service">{booking.service.name}</span>
@@ -132,6 +141,12 @@
           </li>
         {/each}
       </ul>
+
+      {#if hasPastMore}
+        <button class="show-more" onclick={showMorePast}>
+          Show more ({data.pastBookings.length - visiblePastCount} remaining)
+        </button>
+      {/if}
     {/if}
   {/if}
 </div>

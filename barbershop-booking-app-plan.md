@@ -50,20 +50,54 @@ Every shop registers with a `plan_type` that gates features and determines UI re
 
 ### `shops`
 ```sql
-id                   uuid PK
-owner_id             uuid → auth.users
-name                 text
-slug                 text UNIQUE        -- e.g. "cuts-by-dave" for public booking URL
-plan_type            text               -- 'solo' | 'multi'
-auto_accept          boolean DEFAULT false
-booking_window_days  int DEFAULT 28     -- how far ahead customers can book
-buffer_minutes       int DEFAULT 0      -- gap between appointments
-timezone             text DEFAULT 'Europe/London'
-logo_url             text
-brand_colour         text               -- hex, for branded emails
-is_active            boolean DEFAULT true
-created_at           timestamptz
+id         uuid PK
+owner_id   uuid → auth.users
+name       text
+slug       text UNIQUE        -- e.g. "cuts-by-dave" for public booking URL
+plan_type  text               -- 'solo' | 'multi'
+timezone   text DEFAULT 'Europe/London'
+is_active  boolean DEFAULT true
+created_at timestamptz
 ```
+
+> Booking behaviour settings (auto_accept, booking_window_days, buffer_minutes) have moved to `shop_preferences`. Visual identity (logo_url, brand_colour) was already in `client_branding`. A trigger (`trigger_create_shop_defaults`) auto-inserts default rows into both `shop_preferences` and `shop_display_settings` whenever a new shop is created.
+
+### `shop_preferences`
+```sql
+id                  uuid PK
+shop_id             uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+auto_accept         boolean NOT NULL DEFAULT false
+booking_window_days integer NOT NULL DEFAULT 30
+buffer_minutes      integer NOT NULL DEFAULT 0
+deposit_required    boolean NOT NULL DEFAULT false
+show_shop_page      boolean NOT NULL DEFAULT false
+created_at          timestamptz
+updated_at          timestamptz           -- auto-updated via handle_updated_at() trigger
+```
+
+### `shop_display_settings`
+```sql
+id                    uuid PK
+shop_id               uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+info_panel_enabled    boolean NOT NULL DEFAULT false
+info_panel_message    text NULL
+info_panel_expires_at timestamptz NULL
+created_at            timestamptz
+updated_at            timestamptz           -- auto-updated via handle_updated_at() trigger
+```
+
+### `client_branding`
+```sql
+id                 uuid PK
+shop_id            uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
+color_primary      text NOT NULL DEFAULT '#2d5a27'   -- main brand colour
+color_secondary    text NOT NULL DEFAULT '#8e4432'   -- accent / secondary colour
+color_on_primary   text NOT NULL DEFAULT '#ffffff'   -- text on primary background
+color_on_secondary text NOT NULL DEFAULT '#ffffff'   -- text on secondary background
+-- CHECK: all four columns match ^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$
+```
+
+> All four colour columns are full hex strings with `#` prefix. The admin branding settings page validates and normalises 3-digit shorthand before writing. A WCAG AA contrast checker (`$lib/utils/contrast.ts`) warns the admin when either colour pair falls below 4.5:1.
 
 ### `barbers`
 ```sql
@@ -92,14 +126,15 @@ is_active   boolean
 
 ### `services`
 ```sql
-id               uuid PK
-shop_id          uuid → shops
-name             text               -- e.g. "Skin Fade"
-description      text
-duration_minutes int
-price_pence      int                -- store in pence, display as £
-is_active        boolean
-display_order    int
+id                   uuid PK
+shop_id              uuid → shops
+name                 text               -- e.g. "Skin Fade"
+description          text
+duration_minutes     int
+price_pence          int                -- store in pence, display as £
+deposit_amount_pence int NULL           -- nullable; per-service deposit override
+is_active            boolean
+display_order        int
 ```
 
 ### `availability_rules`
@@ -107,26 +142,37 @@ display_order    int
 id           uuid PK
 barber_id    uuid → barbers
 day_of_week  int               -- 0=Sun, 6=Sat
+shift_number int DEFAULT 1     -- 1 or 2; supports split shifts (e.g. morning + afternoon)
 start_time   time
 end_time     time
 is_working   boolean
+-- UNIQUE (barber_id, day_of_week, shift_number)
 ```
+
+> Split shifts: a barber can have two rows per day (shift_number 1 and 2). `get-available-slots` generates one slot block per shift row and merges them.
 
 ### `blocked_slots`
 ```sql
-id          uuid PK
-barber_id   uuid → barbers
-start_at    timestamptz
-end_at      timestamptz
-reason      text               -- "Holiday", "Lunch", etc.
+id                   uuid PK
+barber_id            uuid → barbers
+start_at             timestamptz
+end_at               timestamptz
+reason               text               -- "Holiday", "Lunch", etc.
+recurrence_pattern   text DEFAULT 'none' -- 'none' | 'daily' | 'weekly' | 'fortnightly' | 'monthly'
+recurrence_id        uuid               -- nullable; shared across all rows in a series
+recurrence_end_date  date               -- nullable; optional admin-set end date for the series
+generated_until      date               -- nullable; stored on FIRST row of series only; date of last generated occurrence
 ```
+
+> Recurring series: all occurrence rows share the same `recurrence_id`. `generated_until` is stamped only on the first row (lowest `start_at`) and points to the last generated occurrence date. Rows are pre-generated up to 18 months ahead or `recurrence_end_date`, whichever comes first.
 
 ### `customers`
 ```sql
 id             uuid PK
 user_id        uuid → auth.users   -- nullable for guests
 shop_id        uuid → shops
-name           text
+first_name     text
+last_name      text
 email          text
 phone          text
 is_guest       boolean DEFAULT false
@@ -134,6 +180,20 @@ loyalty_points int DEFAULT 0
 notes          text               -- owner-visible notes
 created_at     timestamptz
 ```
+
+### `customer_notification_preferences`
+```sql
+customer_id             uuid PK → customers (cascade delete)
+email_confirmations     boolean DEFAULT true
+email_reminders         boolean DEFAULT true
+whatsapp_confirmations  boolean DEFAULT false
+whatsapp_reminders      boolean DEFAULT false
+sms_confirmations       boolean DEFAULT false
+sms_reminders           boolean DEFAULT false
+updated_at              timestamptz
+```
+
+> Separate table (not columns on `customers`) to keep the core record clean and allow new channels to be added without widening the customers table. Row is upserted on first save from account settings; defaults apply until then.
 
 ### `bookings`
 ```sql
@@ -259,10 +319,10 @@ src/routes/
 │   └── reviews/[slug]/            Public reviews page
 │
 ├── (customer)/                    Authed customers
-│   ├── dashboard/                 My upcoming bookings
-│   ├── bookings/[id]/             Booking detail + cancel/reschedule
-│   ├── history/                   Past bookings + leave review
-│   └── account/                   Profile, notification prefs
+│   ├── dashboard/                 Upcoming + past bookings (tabbed), account settings link
+│   ├── booking/[id]/              Booking detail + cancel action
+│   ├── booking/[id]/review/       Review submission form (completed bookings only)
+│   └── account/                   Profile (name, phone), notification prefs (email/whatsapp/sms)
 │
 ├── (admin)/                       Owner + staff
 │   ├── dashboard/                 Today's bookings, quick stats
@@ -277,10 +337,8 @@ src/routes/
 │   ├── analytics/                 Charts: bookings, revenue, no-shows
 │   ├── notifications/             Email template preview + history
 │   ├── discount-codes/            CRUD discount codes
-│   └── settings/
-│       ├── shop/                  Name, slug, logo, brand colour
-│       ├── booking/               Auto-accept toggle, buffer, window, deposit
-│       └── billing/               Plan management (future Stripe)
+│   └── settings/                  Single page: booking prefs + display settings + branding
+│       └── billing/               Plan management (future Stripe — not yet built)
 ```
 
 ---
@@ -294,7 +352,8 @@ src/routes/
 | `send-reminders` | Cron (daily 8am) | Find bookings in 24hrs, send Brevo reminders |
 | `expire-pending` | Cron (hourly) | Auto-expire pending bookings older than X hrs |
 | `notify-waitlist` | DB webhook on cancel | Find waitlisted customers, send slot-open email |
-| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings |
+| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings. Handles multiple `availability_rules` rows per day (split shifts) — generates one slot block per shift row and merges results. |
+| `extend-recurring-blocks` | Cron (daily 3am UTC) | Top up recurring blocked slot series expiring within 14 days across all active shops; fallback to the manual extend UI. |
 
 ---
 
@@ -323,6 +382,7 @@ src/routes/
 |---|---|---|---|
 | `bookings` | Read/create own | Read assigned | Full access |
 | `customers` | Read/edit own | Read | Full access |
+| `customer_notification_preferences` | Read/write own | — | Read (via shop) |
 | `services` | Read active | Read | Full CRUD |
 | `barbers` | Read active | Read own | Full CRUD |
 | `reviews` | Read all, write own | Read | Read + hide |
@@ -455,6 +515,15 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Price storage | Integer pence (e.g. 1500 = £15.00) | Avoids floating point issues |
 | Slug | Per-shop unique slug for public booking URL | Allows white-label feel without custom domains |
 | Plan gating | Single `plan_type` field on `shops` | Simple, no extra tables, easy to extend |
+| Notification preferences | Separate `customer_notification_preferences` table (not columns on `customers`) | Keeps customers table clean; adding new channels (WhatsApp, SMS) is a targeted migration rather than widening a core table. WhatsApp and SMS columns exist from the start, defaulting to false, ready to activate when those integrations are built. |
+| Blocked slots recurrence | `recurrence_pattern` enum (`none/daily/weekly/fortnightly/monthly`) + `recurrence_id`, `recurrence_end_date`, `generated_until` columns on `blocked_slots`. Full recurring UI built: create/edit/delete with single vs. future scope, booking-conflict warning flow, expiry alerts on dashboard and blocked-slots page, manual extend action, and `extend-recurring-blocks` daily cron as fallback. |
+| Shop settings normalised out of `shops` | `auto_accept`, `booking_window_days`, `buffer_minutes` moved to `shop_preferences`; `logo_url`/`brand_colour` were already in `client_branding`. `shop_preferences` and `shop_display_settings` are 1:1 with shops, auto-created by trigger. `deposit_amount_pence` added to `services` for per-service deposit overrides. |
+| Transactional email provider | Resend (not Brevo) | Simpler API, better developer experience; Brevo references in this doc are legacy |
+| Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
+| Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |
+| `client_branding` extended | Added `color_on_primary` + `color_on_secondary` columns (text, not null, default `#ffffff`); added hex check constraints on all four colour columns; `create_shop_defaults()` trigger updated to seed all four. Migration: `20260512000000_client_branding_on_colours.sql`. | Needed to properly support accessible colour-on-colour contrast without guessing the text colour from the background. |
+| Admin settings page — single route | Implemented as one `/admin/settings` page with three sections (Booking Preferences, Display Settings, Branding), not sub-routes as originally planned. Two form actions: `?/updatePreferences` and `?/updateBranding`. | Sub-routes would have been over-engineering for the current feature set; a single page with clearly labelled sections is simpler and still extensible. |
+| WCAG contrast utility | `$lib/utils/contrast.ts` provides `hexToLinearRgb`, `getLuminance`, `getContrastRatio`, `getContrastRating`. Thresholds: < 3:1 = Fail, 3–4.49:1 = AA Large, ≥ 4.5:1 = AA Pass. Used in the branding section live preview. A soft pre-submit warning fires (with bypass) when either colour pair fails 4.5:1. | Button label text is normal-sized so 4.5:1 is the relevant threshold. Warning is soft (not blocking) so the admin can override if their design intent is deliberate. |
 
 ---
 

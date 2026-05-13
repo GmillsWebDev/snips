@@ -51,10 +51,10 @@
 ---
 
 ## 6 — Services & Schedule Management
-- [ ] 6.1 Service CRUD (name, price, duration, display order, deposit amount)
-- [ ] 6.2 Availability rules (per barber, per day of week)
-- [ ] 6.3 Blocked slots UI (holidays, breaks, custom time off, one off days added)
-- [ ] 6.4 Shop settings (buffer time, booking window, auto-accept toggle, deposit required)
+- [x] 6.1 Service CRUD (name, price, duration, display order, soft-delete with confirmation modal)
+- [x] 6.2 Availability rules (per barber, per day of week, split shifts, debounced auto-save with inline feedback)
+- [x] 6.3 Blocked slots UI (one-off full day, custom range, recurring breaks with recurrence patterns, expiry alerts, auto-extend cron)
+- [x] 6.4 Shop settings — complete. Single `/admin/settings` page with three sections: Booking Preferences (`booking_window_days`, `buffer_minutes` with server-side validation), Display Settings (coming soon toggles), and Branding (four colour pickers with hex inputs, live WCAG AA contrast checker, soft save warning with bypass). Server actions: `?/updatePreferences` and `?/updateBranding`. New components: `ColourRow.svelte` (admin), `ComingSoon.svelte` (ui). New utility: `$lib/utils/contrast.ts`. Migration `20260512000000_client_branding_on_colours.sql` added `color_on_primary` and `color_on_secondary` to `client_branding`.
 
 ---
 

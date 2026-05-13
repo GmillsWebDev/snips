@@ -2,13 +2,23 @@
    CSS Custom Properties
 =========================== */
 :root {
+  /* Landing Branding */
+  --color-brand-primary:#2d5a27;
+  --color-brand-primary-hover: color-mix(in srgb, var(--color-brand-primary) 75%, black);
+  --color-brand-secondary:#8e4432;
+  --color-brand-secondary-hover: color-mix(in srgb, var(--color-brand-secondary) 75%, black);
+  --color-brand-text: #e8e8e4;
+  --color-brand-subtext: #707a70;
+  --color-brand-background: #121412;
+  --color-brandsurface: #2e362c;
+
   /* Brand */
-  --color-primary: #0b0b92;
+  --color-primary: #2d5a27;
   --color-primary-hover: color-mix(in srgb, var(--color-primary) 75%, white);
   --color-on-primary: #ffffff;
-  --color-secondary: #26b6bb;
+  --color-secondary: #8e4432;
   --color-secondary-hover: color-mix(in srgb, var(--color-secondary) 75%, black);;
-  --color-on-secondary: #000000;
+  --color-on-secondary: #ffffff;
 
   --color-accent: #26b6bb;
 
@@ -81,6 +91,10 @@
 
   /* Transitions */
   --transition: 150ms ease;
+
+  /* Widths */
+  --max-width-container: 1600px;
+  --width-container: calc(100% - 4rem);
 }
 
 /* ===========================
@@ -135,8 +149,8 @@ h3 { font-size: var(--font-size-xl);  font-weight: 600; line-height: 1.4; }
 /* Global Styles */
 
 .container{
-	max-width: 1600px;
-	width: calc(100% - 4rem);
+	max-width: var(--max-width-container);
+	width: var(--width-container);
 	margin: 4rem auto;
 }
 

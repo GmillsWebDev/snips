@@ -18,21 +18,31 @@ begin
   -- -------------------------
   -- Shop
   -- -------------------------
-  insert into public.shops (id, owner_id, name, slug, plan_type, auto_accept, booking_window_days, buffer_minutes, timezone, brand_colour, is_active)
+  insert into public.shops (id, owner_id, name, slug, plan_type, timezone, is_active)
   values (
     v_shop_id,
     v_user_id,
     'Snips Barbershop',
     'snips-test',
     'solo',
-    false,
-    28,
-    0,
     'Europe/London',
-    '#0b0b92',
     true
   )
   on conflict (id) do nothing;
+
+  -- -------------------------
+  -- Shop preferences
+  -- -------------------------
+  insert into public.shop_preferences (shop_id, auto_accept, booking_window_days, buffer_minutes)
+  values (v_shop_id, false, 28, 0)
+  on conflict (shop_id) do nothing;
+
+  -- -------------------------
+  -- Shop display settings
+  -- -------------------------
+  insert into public.shop_display_settings (shop_id)
+  values (v_shop_id)
+  on conflict (shop_id) do nothing;
 
   -- -------------------------
   -- Barber
