@@ -775,9 +775,9 @@ export const actions: Actions = {
     return redirect(303, '/admin/blocked-slots')
   },
 
-  updateOccurrence: async ({ request, locals }) => runUpdateOccurrence(request, locals, false),
+  updateOccurrence: ({ request, locals }) => runUpdateOccurrence(request, locals, false),
 
-  updateOccurrenceConfirmed: async ({ request, locals }) => runUpdateOccurrence(request, locals, true),
+  updateOccurrenceConfirmed: ({ request, locals }) => runUpdateOccurrence(request, locals, true),
 
   extendRecurrence: async ({ request, locals }) => {
     const { user } = await locals.safeGetSession()
@@ -852,6 +852,6 @@ export const actions: Actions = {
     if (insertErr) return fail(500, { formError: 'Failed to extend recurring series' })
 
     await syncGeneratedUntil(admin, recurrenceId)
-    redirect(303, '/admin/blocked-slots')
+    return redirect(303, '/admin/blocked-slots')
   },
 }
