@@ -17,7 +17,7 @@ export const bookingCancelled = (params: {
     : `Your booking has been cancelled, ${customerName}.`;
 
   const body = cancelledBy === 'customer'
-    ? `Your booking has been cancelled as requested.`
+    ? 'Your booking has been cancelled as requested.'
     : `Unfortunately ${shopName} has had to cancel this booking. We're sorry for any inconvenience.`;
 
   return `<!DOCTYPE html>
