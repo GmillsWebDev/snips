@@ -240,9 +240,39 @@
       </section>
     {/if}
 
+    <!-- ── Review (completed bookings only) ──────────── -->
+    {#if data.booking.status === 'completed'}
+      <section class="card card--full">
+        <h2 class="card__title">Review</h2>
+
+        {#if data.review}
+          <div class="review">
+            <div class="review__stars" aria-label="Rating: {data.review.rating} out of 5">
+              {#each [1, 2, 3, 4, 5] as star}
+                <span class="review__star" class:review__star--filled={star <= data.review.rating}>★</span>
+              {/each}
+            </div>
+
+            {#if data.review.comment}
+              <p class="review__comment">{data.review.comment}</p>
+            {:else}
+              <p class="review__no-comment">No comment left</p>
+            {/if}
+
+            <p class="review__date">Submitted {data.review.createdAt}</p>
+          </div>
+        {:else}
+          <p class="review__empty">No review left for this booking.</p>
+        {/if}
+      </section>
+    {/if}
+
+  </div>
+
+  <div class="side-panels">
     <!-- ── Other bookings (conditional) ─────────────── -->
     {#if data.relatedBookings.upcoming || data.relatedBookings.previous.length > 0}
-      <section class="card card--full">
+      <section class="card">
         <h2 class="card__title">Other bookings for {data.booking.customer.name}</h2>
 
         <div class="related">
@@ -275,36 +305,34 @@
       </section>
     {/if}
 
-    <!-- ── Review (completed bookings only) ──────────── -->
-    {#if data.booking.status === 'completed'}
-      <section class="card card--full">
-        <h2 class="card__title">Review</h2>
+    <!-- ── Notification history ───────────────────────── -->
+    <section class="notes-panel" class:side-panels__solo={!(data.relatedBookings.upcoming || data.relatedBookings.previous.length > 0)}>
+      <div class="notes-panel__toggle" style="cursor: default;">
+        <span class="notes-panel__toggle-label">
+          Notification history
+          <span class="notes-panel__subtitle">— emails sent for this booking</span>
+        </span>
+      </div>
 
-        {#if data.review}
-          <div class="review">
-            <div class="review__stars" aria-label="Rating: {data.review.rating} out of 5">
-              {#each [1, 2, 3, 4, 5] as star}
-                <span class="review__star" class:review__star--filled={star <= data.review.rating}>★</span>
-              {/each}
+      {#if data.notifications.length === 0}
+        <p class="review__empty">No notifications sent yet.</p>
+      {:else}
+        <div class="notif-list">
+          {#each data.notifications as n (n.id)}
+            <div class="notif-row">
+              <span class="notif-row__type">{n.type.replace(/_/g, ' ')}</span>
+              <span class="notif-row__channel">{n.channel}</span>
+              <span class="notif-row__when">{n.sentAt}</span>
+              <span
+                class="notif-row__status"
+                class:notif-row__status--sent={n.status === 'sent'}
+              >{n.status}</span>
             </div>
-
-            {#if data.review.comment}
-              <p class="review__comment">{data.review.comment}</p>
-            {:else}
-              <p class="review__no-comment">No comment left</p>
-            {/if}
-
-            <p class="review__date">Submitted {data.review.createdAt}</p>
-          </div>
-        {:else}
-          <p class="review__empty">No review left for this booking.</p>
-        {/if}
-      </section>
-    {/if}
-
+          {/each}
+        </div>
+      {/if}
+    </section>
   </div>
-
-  
 
   <!-- ── Internal notes ──────────────────────────────── -->
   <section class="notes-panel">
@@ -437,6 +465,24 @@
     .detail-grid {
       grid-template-columns: 1fr;
     }
+  }
+
+  /* ── Side panels ──────────────────────────────────── */
+
+  .side-panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-4);
+  }
+
+  @media (max-width: 600px) {
+    .side-panels {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .side-panels__solo {
+    grid-column: 1 / -1;
   }
 
   /* ── Card ─────────────────────────────────────────── */
@@ -775,6 +821,56 @@
   .review__empty {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  /* ── Notification history ────────────────────────── */
+
+  .notif-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .notif-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .notif-row__type {
+    color: var(--color-text);
+    font-weight: 500;
+    text-transform: capitalize;
+  }
+
+  .notif-row__channel {
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.05em;
+  }
+
+  .notif-row__when {
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .notif-row__status {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .notif-row__status--sent {
+    color: var(--color-accepted-text);
   }
 
   /* ── ─────────────────────────────────────────────── */

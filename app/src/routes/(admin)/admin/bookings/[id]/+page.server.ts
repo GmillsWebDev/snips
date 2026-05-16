@@ -39,6 +39,14 @@ export type BookingDetail = {
   chairLabel: string
 }
 
+export type NotificationLog = {
+  id: string
+  type: string
+  channel: string
+  status: string
+  sentAt: string
+}
+
 const TIMEZONE = 'Europe/London'
 
 function formatDate(iso: string): string {
@@ -128,7 +136,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   type ReviewResult = { rating: number; comment: string | null; created_at: string } | null
 
-  const [previousResult, upcomingResult, reviewResult] = await Promise.all([
+  const [previousResult, upcomingResult, reviewResult, notificationsResult] = await Promise.all([
     admin
       .from('bookings')
       .select(relatedSelect)
@@ -152,6 +160,11 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       .select('rating, comment, created_at')
       .eq('booking_id', params.id)
       .maybeSingle(),
+    admin
+      .from('notification_log')
+      .select('id, type, channel, status, sent_at')
+      .eq('booking_id', params.id)
+      .order('sent_at', { ascending: true }),
   ])
 
   function toRelated(b: { id: string; start_at: string; status: string; services: { name: string } | null }): RelatedBooking {
@@ -211,7 +224,15 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     chairLabel: data.chairs?.label ?? '',
   }
 
-  return { booking, relatedBookings, backHref, review }
+  const notifications: NotificationLog[] = (notificationsResult.data ?? []).map(n => ({
+    id: n.id,
+    type: n.type,
+    channel: n.channel,
+    status: n.status,
+    sentAt: formatDateTime(n.sent_at),
+  }))
+
+  return { booking, relatedBookings, backHref, review, notifications }
 }
 
 export const actions: Actions = {
