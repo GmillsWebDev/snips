@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:supabase.com)"
+      "WebFetch(domain:supabase.com)",
+      "Bash(Test-Path C:\\\\source\\\\repos\\\\snips\\\\supabase\\\\functions\\\\send-reminders *)"
     ]
   }
 }

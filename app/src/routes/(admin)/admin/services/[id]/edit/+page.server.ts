@@ -86,7 +86,8 @@ export const actions: Actions = {
 
     if (updateErr) {
       if ((updateErr as { code?: string }).code === '23505') {
-        return fail(400, { errors: { displayOrder: 'That display order is already in use.' }, values })
+        const errors: Record<string, string> = { displayOrder: 'That display order is already in use.' }
+        return fail(400, { errors, values })
       }
       return fail(500, { error: 'Failed to update service. Please try again.' })
     }

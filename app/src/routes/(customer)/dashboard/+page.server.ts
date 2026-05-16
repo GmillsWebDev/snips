@@ -127,13 +127,13 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
     status: b.status as 'pending' | 'accepted',
     notes: b.notes ?? null,
     service: {
-      name: b.services?.name ?? '',
-      durationMinutes: b.services?.duration_minutes ?? 0,
-      pricePence: b.services?.price_pence ?? 0,
+      name: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.name ?? '',
+      durationMinutes: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.duration_minutes ?? 0,
+      pricePence: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.price_pence ?? 0,
     },
-    barberName: b.barbers?.name ?? '',
-    chairLabel: b.chairs?.label ?? null,
-    shopSlug: b.shops?.slug ?? null,
+    barberName: (b.barbers as unknown as { name: string } | null)?.name ?? '',
+    chairLabel: (b.chairs as unknown as { label: string } | null)?.label ?? null,
+    shopSlug: (b.shops as unknown as { slug: string } | null)?.slug ?? null,
   }))
 
   const pastBookings: PastBooking[] = (pastResult.data ?? []).map(b => ({
@@ -141,7 +141,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
     date: formatDate(b.start_at),
     time: formatTime(b.start_at),
     status: b.status as BookingStatus,
-    service: { name: b.services?.name ?? '' },
+    service: { name: (b.services as unknown as { name: string } | null)?.name ?? '' },
     hasReview: Array.isArray(b.reviews) ? b.reviews.length > 0 : b.reviews !== null,
   }))
 

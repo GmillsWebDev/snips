@@ -116,7 +116,13 @@ export const load: PageServerLoad = async ({ parent, url }) => {
   const { data, error: err } = await query.order('start_at', { ascending: true })
   if (err) error(500, err.message)
 
-  const bookings: Booking[] = (data ?? []).map(b => ({
+  type JoinedRow = {
+    id: string; start_at: string; end_at: string; status: string
+    customers: { first_name: string; last_name: string; email: string; phone: string } | null
+    services: { name: string; price_pence: number } | null
+    barbers: { name: string } | null
+  }
+  const bookings: Booking[] = ((data ?? []) as unknown as JoinedRow[]).map(b => ({
     id: b.id,
     startAt: b.start_at,
     endAt: b.end_at,

@@ -239,14 +239,15 @@ created_at   timestamptz
 
 ### `notification_log`
 ```sql
-id               uuid PK
-booking_id       uuid → bookings
-type             text   -- 'confirmation' | 'reminder' | 'accepted' | 'rejected' | 'cancelled' | 'waitlist'
-channel          text   -- 'email' | 'sms' | 'whatsapp'
-sent_at          timestamptz
-brevo_message_id text
-status           text   -- 'sent' | 'failed' | 'bounced'
+id         uuid PK
+booking_id uuid → bookings
+type       text         -- 'confirmation' | 'accepted' | 'rejected' | 'cancelled' | 'reminder' | 'review_invite' | 'waitlist'
+channel    text         -- 'email' | 'sms' | 'whatsapp'
+status     text         -- 'sent' | 'failed' | 'bounced'
+sent_at    timestamptz  -- defaults to now()
 ```
+
+> Logged by each edge function immediately after a successful Resend API call. All current sends use `channel = 'email'` and `status = 'sent'`. The `sent_at` column auto-populates via a `DEFAULT now()` so edge functions don't need to supply it. The admin booking detail page queries this table and renders a "Notification history" panel showing all logged sends for that booking.
 
 ### `discount_codes`
 ```sql
@@ -293,14 +294,14 @@ COMPLETED      CANCELLED
 (review invited)
 ```
 
-| Transition | Who triggers it | Brevo event fired |
+| Transition | Who triggers it | Resend email fired |
 |---|---|---|
-| → PENDING | Customer | `booking_confirmation` to customer |
-| PENDING → ACCEPTED | Owner / auto-accept | `booking_accepted` to customer |
-| PENDING → REJECTED | Owner | `booking_rejected` to customer |
-| ACCEPTED → CANCELLED | Customer or owner | `booking_cancelled` to both parties |
-| ACCEPTED → COMPLETED | Owner marks done | `review_invite` to customer |
-| ACCEPTED → NO_SHOW | Owner marks | Internal log only |
+| → PENDING | Customer | `bookingConfirmation` to customer; owner alert if not auto-accept |
+| PENDING → ACCEPTED | Owner / auto-accept | `bookingAccepted` to customer |
+| PENDING → REJECTED | Owner | `bookingRejected` to customer |
+| ACCEPTED → CANCELLED | Customer or owner | `bookingCancelled` to customer; if cancelled by customer, plain alert to owner |
+| ACCEPTED → COMPLETED | Owner marks done | `reviewInvite` to customer |
+| ACCEPTED → NO_SHOW | Owner marks | No email; internal log only |
 
 ---
 
@@ -345,34 +346,51 @@ src/routes/
 
 ## 6. Supabase Edge Functions
 
-| Function | Trigger | Purpose |
-|---|---|---|
-| `on-booking-created` | DB webhook | Fire Brevo confirmation email, check auto-accept |
-| `on-booking-updated` | DB webhook | Fire accepted / rejected / cancelled emails |
-| `send-reminders` | Cron (daily 8am) | Find bookings in 24hrs, send Brevo reminders |
-| `expire-pending` | Cron (hourly) | Auto-expire pending bookings older than X hrs |
-| `notify-waitlist` | DB webhook on cancel | Find waitlisted customers, send slot-open email |
-| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings. Handles multiple `availability_rules` rows per day (split shifts) — generates one slot block per shift row and merges results. |
-| `extend-recurring-blocks` | Cron (daily 3am UTC) | Top up recurring blocked slot series expiring within 14 days across all active shops; fallback to the manual extend UI. |
+| Function | Trigger | Purpose | Status |
+|---|---|---|---|
+| `on-booking-created` | DB webhook | Send `bookingConfirmation` via Resend; check auto-accept; alert owner if manual | ✅ Built |
+| `on-booking-updated` | DB webhook | Send accepted / rejected / cancelled / review-invite emails based on new status | ✅ Built |
+| `send-reminders` | Cron (daily 7am UTC) | Find accepted bookings within 24hrs, deduplicate via `notification_log`, send `bookingReminder`; respects `email_reminders` preference | ✅ Built |
+| `send-guest-booking-link` | HTTP (called by booking action) | Send magic link email to guest customers so they can manage their booking | ✅ Built |
+| `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings; handles split shifts | ✅ Built |
+| `extend-recurring-blocks` | Cron (daily 3am UTC) | Top up recurring blocked slot series expiring within 14 days; fallback to manual extend UI | ✅ Built |
+| `test-resend-connection` | HTTP (dev/admin only) | Test Resend API key and connectivity | ✅ Built |
+| `expire-pending` | Cron (hourly) | Auto-expire pending bookings older than X hrs | ⬜ Planned |
+| `notify-waitlist` | DB webhook on cancel | Find waitlisted customers, send `waitlistNotification` | ⬜ Planned |
+
+### Shared helpers (`supabase/functions/_shared/`)
+
+| File | Purpose |
+|---|---|
+| `supabase.ts` | `createAdminClient()` — service-role Supabase client for edge functions |
+| `sendEmail.ts` | `sendEmail({ to, subject, html })` — wraps Resend API, reads `RESEND_API_KEY` from env, throws on non-2xx |
 
 ---
 
-## 7. Brevo Integration Points
+## 7. Resend Email Templates
 
-| Template Name | Trigger | Recipient |
-|---|---|---|
-| `booking_confirmation` | Booking created | Customer |
-| `booking_accepted` | Status → accepted | Customer |
-| `booking_rejected` | Status → rejected | Customer |
-| `booking_reminder_24h` | Cron, 24hrs before | Customer |
-| `booking_cancelled_customer` | Cancelled by owner | Customer |
-| `booking_cancelled_owner` | Cancelled by customer | Owner |
-| `review_invite` | Status → completed | Customer |
-| `waitlist_slot_open` | Cancellation triggers | Waitlisted customer |
-| `new_booking_alert` | Booking created | Owner (if not auto-accept) |
-| `guest_booking_link` | Guest books | Customer (magic link to manage booking) |
+All templates live in `supabase/functions/_templates/` as TypeScript files. Each exports `getSubject({ shopName })` and the HTML builder function. Inline HTML only — no external CSS, no Resend template IDs. Dark-themed, brand-colour-aware, mobile-friendly table layout.
 
-> All templates should use the shop's `brand_colour` and `logo_url` via Brevo dynamic params for white-labelled, branded emails.
+| File | Trigger | Recipient | Status |
+|---|---|---|---|
+| `bookingConfirmation.ts` | Booking created | Customer | ✅ Built |
+| `bookingAccepted.ts` | Status → accepted | Customer | ✅ Built |
+| `bookingRejected.ts` | Status → rejected | Customer | ✅ Built |
+| `bookingCancelled.ts` | Status → cancelled | Customer | ✅ Built |
+| `bookingReminder.ts` | 24hr cron | Customer | ✅ Built |
+| `reviewInvite.ts` | Status → completed | Customer | ✅ Built |
+| `waitlistNotification.ts` | Slot opens (planned) | Waitlisted customer | ✅ Built (edge fn pending) |
+
+Owner alert emails (new booking request, customer cancellation) are plain HTML strings inlined in the edge function — not separate template files, as they are internal operational messages not customer-facing.
+
+### Template params
+
+All customer-facing templates accept: `shopName`, `customerName`, `serviceName`, `appointmentDate`, `colorPrimary`, `colorOnPrimary`. Additional per-template params:
+
+- `bookingCancelled`: `cancelledBy: 'customer' | 'shop'` — changes heading and body copy
+- `reviewInvite`: `reviewUrl: string` — CTA button link
+- `waitlistNotification`: `bookingUrl: string` — CTA button link
+- `bookingConfirmation` / `bookingAccepted`: optional `dashboardUrl?: string` — renders a subdued footer link ("Need to make changes? Visit your dashboard")
 
 ---
 

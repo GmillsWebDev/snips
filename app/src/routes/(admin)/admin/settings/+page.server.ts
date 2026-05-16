@@ -76,17 +76,20 @@ export const load: PageServerLoad = async ({ parent }) => {
 
 export const actions: Actions = {
   updatePreferences: async ({ request, locals }) => {
+    type PrefErrors = { form?: string; booking_window_days?: string; buffer_minutes?: string }
+    type PrefPayload = { errors: PrefErrors; values?: { booking_window_days: string; buffer_minutes: string } }
+
     const { user } = await locals.safeGetSession()
-    if (!user) return fail(403, { errors: { form: 'Not authenticated' } })
+    if (!user) return fail<PrefPayload>(403, { errors: { form: 'Not authenticated' } })
 
     const role = await getRole(locals.supabase, user.id)
-    if (!role) return fail(403, { errors: { form: 'Not authorized' } })
+    if (!role) return fail<PrefPayload>(403, { errors: { form: 'Not authorized' } })
 
     const formData = await request.formData()
     const rawWindow = formData.get('booking_window_days')
     const rawBuffer = formData.get('buffer_minutes')
 
-    const errors: { booking_window_days?: string; buffer_minutes?: string } = {}
+    const errors: PrefErrors = {}
 
     const bookingWindowDays = rawWindow !== null ? parseInt(String(rawWindow), 10) : NaN
     if (isNaN(bookingWindowDays) || bookingWindowDays < 1 || bookingWindowDays > 365) {
@@ -99,7 +102,7 @@ export const actions: Actions = {
     }
 
     if (Object.keys(errors).length > 0) {
-      return fail(400, {
+      return fail<PrefPayload>(400, {
         errors,
         values: { booking_window_days: String(rawWindow ?? ''), buffer_minutes: String(rawBuffer ?? '') },
       })
@@ -112,17 +115,25 @@ export const actions: Actions = {
       .update({ booking_window_days: bookingWindowDays, buffer_minutes: bufferMinutes })
       .eq('shop_id', role.shop_id)
 
-    if (updateErr) return fail(500, { errors: { form: 'Failed to save settings. Please try again.' } })
+    if (updateErr) return fail<PrefPayload>(500, { errors: { form: 'Failed to save settings. Please try again.' } })
 
     return redirect(303, '/admin/settings?saved=1')
   },
 
   updateBranding: async ({ request, locals }) => {
+    type BrandingErrors = {
+      form?: string
+      color_primary?: string
+      color_secondary?: string
+      color_on_primary?: string
+      color_on_secondary?: string
+    }
+
     const { user } = await locals.safeGetSession()
-    if (!user) return fail(403, { brandingErrors: { form: 'Not authenticated' } })
+    if (!user) { const brandingErrors: BrandingErrors = { form: 'Not authenticated' }; return fail(403, { brandingErrors }) }
 
     const role = await getRole(locals.supabase, user.id)
-    if (!role) return fail(403, { brandingErrors: { form: 'Not authorized' } })
+    if (!role) { const brandingErrors: BrandingErrors = { form: 'Not authorized' }; return fail(403, { brandingErrors }) }
 
     const formData = await request.formData()
     const rawPrimary     = String(formData.get('color_primary')     ?? '')
@@ -130,13 +141,7 @@ export const actions: Actions = {
     const rawOnPrimary   = String(formData.get('color_on_primary')  ?? '')
     const rawOnSecondary = String(formData.get('color_on_secondary') ?? '')
 
-    const brandingErrors: {
-      color_primary?: string
-      color_secondary?: string
-      color_on_primary?: string
-      color_on_secondary?: string
-      form?: string
-    } = {}
+    const brandingErrors: BrandingErrors = {}
 
     if (!rawPrimary || !HEX_RE.test(rawPrimary))
       brandingErrors.color_primary = 'Must be a valid hex colour (e.g. #2d5a27)'
@@ -171,7 +176,7 @@ export const actions: Actions = {
       })
       .eq('shop_id', role.shop_id)
 
-    if (updateErr) return fail(500, { brandingErrors: { form: 'Failed to save branding. Please try again.' } })
+    if (updateErr) { const brandingErrors: BrandingErrors = { form: 'Failed to save branding. Please try again.' }; return fail(500, { brandingErrors }) }
 
     return redirect(303, '/admin/settings?saved=1')
   },

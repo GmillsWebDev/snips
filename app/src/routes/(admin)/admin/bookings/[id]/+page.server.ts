@@ -39,6 +39,14 @@ export type BookingDetail = {
   chairLabel: string
 }
 
+export type NotificationLog = {
+  id: string
+  type: string
+  channel: string
+  status: string
+  sentAt: string
+}
+
 const TIMEZONE = 'Europe/London'
 
 function formatDate(iso: string): string {
@@ -79,24 +87,96 @@ function formatDateTime(iso: string): string {
   })
 }
 
+type RawBookingData = {
+  id: string
+  shop_id: string
+  customer_id: string
+  status: string
+  start_at: string
+  end_at: string
+  notes: string | null
+  internal_notes: string | null
+  cancellation_reason: string | null
+  deposit_paid_pence: number | null
+  created_at: string
+  updated_at: string
+  customers: { first_name: string; last_name: string; email: string; phone: string } | null
+  services: { name: string; duration_minutes: number; price_pence: number } | null
+  barbers: { name: string } | null
+  chairs: { label: string } | null
+}
+
+type RawReview = { rating: number; comment: string | null; created_at: string } | null
+
+function buildBackHref(referer: string | null): string {
+  if (!referer) return '/admin/bookings'
+  try {
+    const url = new URL(referer)
+    if (url.pathname === '/admin/bookings') return url.pathname + url.search
+  } catch {
+    // malformed referer — keep default
+  }
+  return '/admin/bookings'
+}
+
+function toRelated(b: { id: string; start_at: string; status: string; services: { name: string } | null }): RelatedBooking {
+  return {
+    id: b.id,
+    date: formatShortDate(b.start_at),
+    time: formatTime(b.start_at),
+    serviceName: b.services?.name ?? '',
+    status: b.status as BookingStatus,
+  }
+}
+
+function buildBookingDetail(data: RawBookingData): BookingDetail {
+  return {
+    id: data.id,
+    status: data.status as BookingStatus,
+    date: formatDate(data.start_at),
+    startTime: formatTime(data.start_at),
+    endTime: formatTime(data.end_at),
+    createdAt: formatDateTime(data.created_at),
+    updatedAt: formatDateTime(data.updated_at),
+    notes: data.notes ?? null,
+    internalNotes: data.internal_notes ?? null,
+    cancellationReason: data.cancellation_reason ?? null,
+    depositPaidPence: data.deposit_paid_pence ?? 0,
+    customer: {
+      name: `${data.customers?.first_name ?? ''} ${data.customers?.last_name ?? ''}`.trim(),
+      email: data.customers?.email ?? '',
+      phone: data.customers?.phone ?? '',
+    },
+    service: {
+      name: data.services?.name ?? '',
+      durationMinutes: data.services?.duration_minutes ?? 0,
+      pricePence: data.services?.price_pence ?? 0,
+    },
+    barberName: data.barbers?.name ?? '',
+    chairLabel: data.chairs?.label ?? '',
+  }
+}
+
+function buildReview(raw: RawReview): { rating: number; comment: string | null; createdAt: string } | null {
+  if (!raw) return null
+  return {
+    rating: raw.rating,
+    comment: raw.comment ?? null,
+    createdAt: new Date(raw.created_at).toLocaleDateString('en-GB', {
+      timeZone: TIMEZONE,
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    }),
+  }
+}
+
 export const load: PageServerLoad = async ({ parent, params, request }) => {
   const { role } = await parent()
   const shopId = role.shop_id
   const admin = createSupabaseAdminClient()
 
-  // Carry query params back to the list page (e.g. active filters)
-  let backHref = '/admin/bookings'
-  const referer = request.headers.get('referer')
-  if (referer) {
-    try {
-      const refUrl = new URL(referer)
-      if (refUrl.pathname === '/admin/bookings') {
-        backHref = refUrl.pathname + refUrl.search
-      }
-    } catch {
-      // malformed referer — keep default
-    }
-  }
+  const backHref = buildBackHref(request.headers.get('referer'))
 
   const { data, error: err } = await admin
     .from('bookings')
@@ -126,9 +206,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   const relatedSelect = 'id, start_at, status, services ( name )'
 
-  type ReviewResult = { rating: number; comment: string | null; created_at: string } | null
-
-  const [previousResult, upcomingResult, reviewResult] = await Promise.all([
+  const [previousResult, upcomingResult, reviewResult, notificationsResult] = await Promise.all([
     admin
       .from('bookings')
       .select(relatedSelect)
@@ -152,66 +230,36 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       .select('rating, comment, created_at')
       .eq('booking_id', params.id)
       .maybeSingle(),
+    admin
+      .from('notification_log')
+      .select('id, type, channel, status, sent_at')
+      .eq('booking_id', params.id)
+      .order('sent_at', { ascending: true }),
   ])
-
-  function toRelated(b: { id: string; start_at: string; status: string; services: { name: string } | null }): RelatedBooking {
-    return {
-      id: b.id,
-      date: formatShortDate(b.start_at),
-      time: formatTime(b.start_at),
-      serviceName: b.services?.name ?? '',
-      status: b.status as BookingStatus,
-    }
-  }
 
   if (reviewResult.error) error(500, 'Failed to load review')
 
-  const reviewData = reviewResult.data as ReviewResult
-  const review = reviewData
-    ? {
-        rating: reviewData.rating,
-        comment: reviewData.comment ?? null,
-        createdAt: new Date(reviewData.created_at).toLocaleDateString('en-GB', {
-          timeZone: TIMEZONE,
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        }),
-      }
-    : null
-
+  type AsRelated = { id: string; start_at: string; status: string; services: { name: string } | null }
   const relatedBookings = {
-    previous: (previousResult.data ?? []).map(toRelated),
-    upcoming: upcomingResult.data?.[0] ? toRelated(upcomingResult.data[0]) : null,
+    previous: ((previousResult.data ?? []) as unknown as AsRelated[]).map(toRelated),
+    upcoming: upcomingResult.data?.[0] ? toRelated(upcomingResult.data[0] as unknown as AsRelated) : null,
   }
 
-  const booking: BookingDetail = {
-    id: data.id,
-    status: data.status as BookingStatus,
-    date: formatDate(data.start_at),
-    startTime: formatTime(data.start_at),
-    endTime: formatTime(data.end_at),
-    createdAt: formatDateTime(data.created_at),
-    updatedAt: formatDateTime(data.updated_at),
-    notes: data.notes ?? null,
-    internalNotes: data.internal_notes ?? null,
-    cancellationReason: data.cancellation_reason ?? null,
-    depositPaidPence: data.deposit_paid_pence ?? 0,
-    customer: {
-      name: `${data.customers?.first_name ?? ''} ${data.customers?.last_name ?? ''}`.trim(),
-      email: data.customers?.email ?? '',
-      phone: data.customers?.phone ?? '',
-    },
-    service: {
-      name: data.services?.name ?? '',
-      durationMinutes: data.services?.duration_minutes ?? 0,
-      pricePence: data.services?.price_pence ?? 0,
-    },
-    barberName: data.barbers?.name ?? '',
-    chairLabel: data.chairs?.label ?? '',
-  }
+  const notifications: NotificationLog[] = (notificationsResult.data ?? []).map(n => ({
+    id: n.id,
+    type: n.type,
+    channel: n.channel,
+    status: n.status,
+    sentAt: formatDateTime(n.sent_at),
+  }))
 
-  return { booking, relatedBookings, backHref, review }
+  return {
+    booking: buildBookingDetail(data as unknown as RawBookingData),
+    relatedBookings,
+    backHref,
+    review: buildReview(reviewResult.data),
+    notifications,
+  }
 }
 
 export const actions: Actions = {

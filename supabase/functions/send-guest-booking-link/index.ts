@@ -1,33 +1,11 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { sendEmail } from "../_shared/sendEmail.ts";
 
 const createAdminClient = () =>
   createClient(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
   );
-
-const sendEmail = async (options: {
-  to: string;
-  subject: string;
-  html: string;
-}) => {
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${Deno.env.get("RESEND_API_KEY") ?? ""}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: "Snips <onboarding@resend.dev>",
-      ...options,
-    }),
-  });
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Resend error: ${error}`);
-  }
-  return response.json();
-};
 
 Deno.serve(async (req) => {
   try {

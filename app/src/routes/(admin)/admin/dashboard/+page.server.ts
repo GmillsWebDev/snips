@@ -73,8 +73,8 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
       minute: '2-digit',
     }),
     status: b.status as 'pending' | 'accepted' | 'rejected' | 'cancelled' | 'completed' | 'no_show',
-    customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
-    serviceName: b.services?.name ?? '',
+    customerName: `${(b.customers as unknown as { first_name: string; last_name: string } | null)?.first_name ?? ''} ${(b.customers as unknown as { first_name: string; last_name: string } | null)?.last_name ?? ''}`.trim(),
+    serviceName: (b.services as unknown as { name: string } | null)?.name ?? '',
   }))
 
   const needsAttention = (pendingResult.data ?? [])
@@ -90,8 +90,8 @@ export const load: PageServerLoad = async ({ parent, depends }) => {
         hour: '2-digit',
         minute: '2-digit',
       })}`,
-      customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
-      serviceName: b.services?.name ?? '',
+      customerName: `${(b.customers as unknown as { first_name: string; last_name: string } | null)?.first_name ?? ''} ${(b.customers as unknown as { first_name: string; last_name: string } | null)?.last_name ?? ''}`.trim(),
+      serviceName: (b.services as unknown as { name: string } | null)?.name ?? '',
     }))
 
   return {

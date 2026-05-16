@@ -1,5 +1,9 @@
 import { createAdminClient } from "../_shared/supabase.ts";
-import { sendEmail } from "../_shared/brevo.ts";
+import { sendEmail } from "../_shared/sendEmail.ts";
+import { bookingAccepted, getSubject as getAcceptedSubject } from "../_templates/bookingAccepted.ts";
+import { bookingRejected, getSubject as getRejectedSubject } from "../_templates/bookingRejected.ts";
+import { bookingCancelled, getSubject as getCancelledSubject } from "../_templates/bookingCancelled.ts";
+import { reviewInvite, getSubject as getReviewSubject } from "../_templates/reviewInvite.ts";
 
 Deno.serve(async (req) => {
   try {
@@ -7,7 +11,6 @@ Deno.serve(async (req) => {
     const booking = payload.record;
     const oldBooking = payload.old_record;
 
-    // Only act if status actually changed
     if (booking.status === oldBooking.status) {
       return new Response(JSON.stringify({ skipped: true }), {
         headers: { "Content-Type": "application/json" },
@@ -21,7 +24,7 @@ Deno.serve(async (req) => {
       .select(`
         *,
         shop:shops(name, owner_id),
-        customer:customers(name, email),
+        customer:customers(first_name, last_name, email),
         service:services(name),
         barber:barbers(name)
       `)
@@ -30,93 +33,137 @@ Deno.serve(async (req) => {
 
     if (error) throw error;
 
-    const customerEmail = fullBooking.customer.email;
-    const customerName = fullBooking.customer.name;
+    const customerName = `${fullBooking.customer.first_name} ${fullBooking.customer.last_name}`;
     const shopName = fullBooking.shop.name;
     const serviceName = fullBooking.service.name;
-    const dateStr = new Date(fullBooking.start_at).toLocaleString("en-GB");
 
-    let emailSubject = "";
-    let emailHtml = "";
-    let notificationType = "";
+    const appointmentDate = new Date(fullBooking.start_at).toLocaleString("en-GB", {
+      timeZone: "Europe/London",
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const { data: prefs } = await supabase
+      .from("customer_notification_preferences")
+      .select("email_confirmations")
+      .eq("customer_id", fullBooking.customer_id)
+      .single();
+
+    const { data: branding } = await supabase
+      .from("client_branding")
+      .select("color_primary, color_on_primary")
+      .eq("shop_id", fullBooking.shop_id)
+      .single();
+
+    const colorPrimary = branding?.color_primary ?? "#000000";
+    const colorOnPrimary = branding?.color_on_primary ?? "#ffffff";
+
+    const emailEnabled = prefs?.email_confirmations !== false;
+
+    const baseParams = {
+      shopName,
+      customerName,
+      serviceName,
+      appointmentDate,
+      colorPrimary,
+      colorOnPrimary,
+    };
 
     switch (booking.status) {
-      case "accepted":
-        emailSubject = `Booking confirmed — ${shopName}`;
-        emailHtml = `
-          <h2>Your booking is confirmed! ✂️</h2>
-          <p>Hi ${customerName}, your booking for <strong>${serviceName}</strong> with ${fullBooking.barber.name} has been confirmed.</p>
-          <p>Date: ${dateStr}</p>
-          <p>See you soon!</p>
-        `;
-        notificationType = "accepted";
-        break;
-
-      case "rejected":
-        emailSubject = `Booking update — ${shopName}`;
-        emailHtml = `
-          <h2>Booking not available</h2>
-          <p>Hi ${customerName}, unfortunately your booking for <strong>${serviceName}</strong> on ${dateStr} could not be confirmed.</p>
-          ${booking.cancellation_reason ? `<p>Reason: ${booking.cancellation_reason}</p>` : ""}
-          <p>Please visit our booking page to choose another time.</p>
-        `;
-        notificationType = "rejected";
-        break;
-
-      case "cancelled":
-        emailSubject = `Booking cancelled — ${shopName}`;
-        emailHtml = `
-          <h2>Booking cancelled</h2>
-          <p>Hi ${customerName}, your booking for <strong>${serviceName}</strong> on ${dateStr} has been cancelled.</p>
-          ${booking.cancellation_reason ? `<p>Reason: ${booking.cancellation_reason}</p>` : ""}
-        `;
-        notificationType = "cancelled";
-
-        // Also notify the owner if customer cancelled
-        const { data: ownerUser } = await supabase.auth.admin.getUserById(
-          fullBooking.shop.owner_id
-        );
-        if (ownerUser?.user?.email) {
+      case "accepted": {
+        if (emailEnabled) {
           await sendEmail({
-            to: [{ email: ownerUser.user.email }],
-            subject: `Booking cancelled by customer — ${shopName}`,
-            htmlContent: `
-              <h2>A booking has been cancelled</h2>
-              <p><strong>${customerName}</strong> cancelled their booking for ${serviceName} on ${dateStr}.</p>
-            `,
+            to: fullBooking.customer.email,
+            subject: getAcceptedSubject({ shopName }),
+            html: bookingAccepted(baseParams),
+          });
+          await supabase.from("notification_log").insert({
+            booking_id: booking.id,
+            type: "accepted",
+            channel: "email",
+            status: "sent",
           });
         }
         break;
+      }
 
-      case "completed":
-        emailSubject = `How was your visit? — ${shopName}`;
-        emailHtml = `
-          <h2>Thanks for visiting ${shopName}! ✂️</h2>
-          <p>Hi ${customerName}, we hope you enjoyed your ${serviceName}.</p>
-          <p>We'd love to hear your feedback — it only takes a minute.</p>
-          <a href="${Deno.env.get("PUBLIC_APP_URL")}/review/${booking.id}">Leave a review</a>
-        `;
-        notificationType = "review_invite";
+      case "rejected": {
+        if (emailEnabled) {
+          await sendEmail({
+            to: fullBooking.customer.email,
+            subject: getRejectedSubject({ shopName }),
+            html: bookingRejected(baseParams),
+          });
+          await supabase.from("notification_log").insert({
+            booking_id: booking.id,
+            type: "rejected",
+            channel: "email",
+            status: "sent",
+          });
+        }
         break;
+      }
+
+      case "cancelled": {
+        const cancelledBy: "customer" | "shop" =
+          booking.cancelled_by_role === "customer" ? "customer" : "shop";
+
+        if (emailEnabled) {
+          await sendEmail({
+            to: fullBooking.customer.email,
+            subject: getCancelledSubject({ shopName }),
+            html: bookingCancelled({ ...baseParams, cancelledBy }),
+          });
+          await supabase.from("notification_log").insert({
+            booking_id: booking.id,
+            type: "cancelled",
+            channel: "email",
+            status: "sent",
+          });
+        }
+
+        if (cancelledBy === "customer") {
+          const { data: ownerUser } = await supabase.auth.admin.getUserById(
+            fullBooking.shop.owner_id
+          );
+          if (ownerUser?.user?.email) {
+            await sendEmail({
+              to: ownerUser.user.email,
+              subject: `Booking cancelled by customer — ${shopName}`,
+              html: `<p><strong>${customerName}</strong> cancelled their ${serviceName} on ${appointmentDate}.</p>`,
+            });
+          }
+        }
+        break;
+      }
+
+      case "completed": {
+        const reviewUrl = `${Deno.env.get("PUBLIC_APP_URL")}/review/${booking.id}`;
+        if (emailEnabled) {
+          await sendEmail({
+            to: fullBooking.customer.email,
+            subject: getReviewSubject({ shopName }),
+            html: reviewInvite({ ...baseParams, reviewUrl }),
+          });
+          await supabase.from("notification_log").insert({
+            booking_id: booking.id,
+            type: "review_invite",
+            channel: "email",
+            status: "sent",
+          });
+        }
+        break;
+      }
 
       default:
         return new Response(JSON.stringify({ skipped: true }), {
           headers: { "Content-Type": "application/json" },
         });
     }
-
-    await sendEmail({
-      to: [{ email: customerEmail, name: customerName }],
-      subject: emailSubject,
-      htmlContent: emailHtml,
-    });
-
-    await supabase.from("notification_log").insert({
-      booking_id: booking.id,
-      type: notificationType,
-      channel: "email",
-      status: "sent",
-    });
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { "Content-Type": "application/json" },
