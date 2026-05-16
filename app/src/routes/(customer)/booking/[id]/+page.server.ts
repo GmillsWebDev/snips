@@ -102,12 +102,12 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
     notes: data.notes ?? null,
     cancellationReason: data.cancellation_reason ?? null,
     service: {
-      name: data.services[0]?.name ?? '',
-      durationMinutes: data.services[0]?.duration_minutes ?? 0,
-      pricePence: data.services[0]?.price_pence ?? 0,
+      name: (data.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.name ?? '',
+      durationMinutes: (data.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.duration_minutes ?? 0,
+      pricePence: (data.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.price_pence ?? 0,
     },
-    barberName: data.barbers[0]?.name ?? '',
-    chairLabel: data.chairs[0]?.label ?? null,
+    barberName: (data.barbers as unknown as { name: string } | null)?.name ?? '',
+    chairLabel: (data.chairs as unknown as { label: string } | null)?.label ?? null,
   }
 
   return { booking }

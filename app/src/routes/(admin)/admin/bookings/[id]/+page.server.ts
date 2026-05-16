@@ -100,10 +100,10 @@ type RawBookingData = {
   deposit_paid_pence: number | null
   created_at: string
   updated_at: string
-  customers: { first_name: string; last_name: string; email: string; phone: string }[]
-  services: { name: string; duration_minutes: number; price_pence: number }[]
-  barbers: { name: string }[]
-  chairs: { label: string }[]
+  customers: { first_name: string; last_name: string; email: string; phone: string } | null
+  services: { name: string; duration_minutes: number; price_pence: number } | null
+  barbers: { name: string } | null
+  chairs: { label: string } | null
 }
 
 type RawReview = { rating: number; comment: string | null; created_at: string } | null
@@ -119,12 +119,12 @@ function buildBackHref(referer: string | null): string {
   return '/admin/bookings'
 }
 
-function toRelated(b: { id: string; start_at: string; status: string; services: { name: string }[] }): RelatedBooking {
+function toRelated(b: { id: string; start_at: string; status: string; services: { name: string } | null }): RelatedBooking {
   return {
     id: b.id,
     date: formatShortDate(b.start_at),
     time: formatTime(b.start_at),
-    serviceName: b.services[0]?.name ?? '',
+    serviceName: b.services?.name ?? '',
     status: b.status as BookingStatus,
   }
 }
@@ -143,17 +143,17 @@ function buildBookingDetail(data: RawBookingData): BookingDetail {
     cancellationReason: data.cancellation_reason ?? null,
     depositPaidPence: data.deposit_paid_pence ?? 0,
     customer: {
-      name: `${data.customers[0]?.first_name ?? ''} ${data.customers[0]?.last_name ?? ''}`.trim(),
-      email: data.customers[0]?.email ?? '',
-      phone: data.customers[0]?.phone ?? '',
+      name: `${data.customers?.first_name ?? ''} ${data.customers?.last_name ?? ''}`.trim(),
+      email: data.customers?.email ?? '',
+      phone: data.customers?.phone ?? '',
     },
     service: {
-      name: data.services[0]?.name ?? '',
-      durationMinutes: data.services[0]?.duration_minutes ?? 0,
-      pricePence: data.services[0]?.price_pence ?? 0,
+      name: data.services?.name ?? '',
+      durationMinutes: data.services?.duration_minutes ?? 0,
+      pricePence: data.services?.price_pence ?? 0,
     },
-    barberName: data.barbers[0]?.name ?? '',
-    chairLabel: data.chairs[0]?.label ?? '',
+    barberName: data.barbers?.name ?? '',
+    chairLabel: data.chairs?.label ?? '',
   }
 }
 
@@ -239,9 +239,10 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   if (reviewResult.error) error(500, 'Failed to load review')
 
+  type AsRelated = { id: string; start_at: string; status: string; services: { name: string } | null }
   const relatedBookings = {
-    previous: (previousResult.data ?? []).map(toRelated),
-    upcoming: upcomingResult.data?.[0] ? toRelated(upcomingResult.data[0]) : null,
+    previous: ((previousResult.data ?? []) as unknown as AsRelated[]).map(toRelated),
+    upcoming: upcomingResult.data?.[0] ? toRelated(upcomingResult.data[0] as unknown as AsRelated) : null,
   }
 
   const notifications: NotificationLog[] = (notificationsResult.data ?? []).map(n => ({
@@ -253,7 +254,7 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
   }))
 
   return {
-    booking: buildBookingDetail(data),
+    booking: buildBookingDetail(data as unknown as RawBookingData),
     relatedBookings,
     backHref,
     review: buildReview(reviewResult.data),
