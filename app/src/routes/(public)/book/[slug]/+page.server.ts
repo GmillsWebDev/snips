@@ -22,7 +22,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     name: shopRaw.name,
     plan_type: shopRaw.plan_type,
     timezone: shopRaw.timezone,
-    booking_window_days: shopRaw.shop_preferences?.booking_window_days ?? 30,
+    booking_window_days: shopRaw.shop_preferences?.[0]?.booking_window_days ?? 30,
   }
 
   const [servicesResult, barberResult] = await Promise.all([

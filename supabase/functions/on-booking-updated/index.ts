@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
     const { data: prefs } = await supabase
       .from("customer_notification_preferences")
-      .select("email_enabled")
+      .select("email_confirmations")
       .eq("customer_id", fullBooking.customer_id)
       .single();
 
@@ -62,7 +62,7 @@ Deno.serve(async (req) => {
     const colorPrimary = branding?.color_primary ?? "#000000";
     const colorOnPrimary = branding?.color_on_primary ?? "#ffffff";
 
-    const emailEnabled = prefs?.email_enabled !== false;
+    const emailEnabled = prefs?.email_confirmations !== false;
 
     const baseParams = {
       shopName,

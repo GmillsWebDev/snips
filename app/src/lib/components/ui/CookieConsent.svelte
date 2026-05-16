@@ -1,4 +1,4 @@
-<script>
+<script lang="ts">
   import { onMount } from 'svelte';
   import cookieIcon from '$lib/assets/images/icons/cookieIcon.svg';
 
@@ -80,17 +80,18 @@ gtag('config', 'G-QR8FCS580F');
 
   function injectDiagnostics() {
     if (window.csqLoaded) return;
-    (function (c, s, q, u, a, r, e) {
-      c.hj = c.hj || function () {
-        (c.hj.q = c.hj.q || []).push(arguments);
+    if (!window.hj) {
+      const hjFn: ((...args: unknown[]) => void) & { q?: unknown[][] } = (...args: unknown[]) => {
+        (hjFn.q = hjFn.q ?? []).push(args);
       };
-      c._hjSettings = { hjid: a };
-      r = s.getElementsByTagName('head')[0];
-      e = s.createElement('script');
-      e.async = true;
-      e.src = q + c._hjSettings.hjid + u;
-      r.appendChild(e);
-    })(window, document, 'https://static.hj.contentsquare.net/c/csq-', '.js', 6657746);
+      window.hj = hjFn;
+    }
+    window._hjSettings = { hjid: 6657746 };
+    const head = document.getElementsByTagName('head')[0];
+    const script = document.createElement('script');
+    script.async = true;
+    script.src = `https://static.hj.contentsquare.net/c/csq-${window._hjSettings.hjid}.js`;
+    head.appendChild(script);
     window.csqLoaded = true;
   }
 

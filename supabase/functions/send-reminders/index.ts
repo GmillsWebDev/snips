@@ -45,11 +45,11 @@ Deno.serve(async (_req) => {
       // Skip if customer has opted out of emails
       const { data: prefs } = await supabase
         .from("customer_notification_preferences")
-        .select("email_enabled")
+        .select("email_reminders")
         .eq("customer_id", booking.customer_id)
         .single();
 
-      if (prefs?.email_enabled === false) {
+      if (prefs?.email_reminders === false) {
         skipped++;
         continue;
       }

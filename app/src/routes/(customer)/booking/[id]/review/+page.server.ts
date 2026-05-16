@@ -78,7 +78,7 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
   return {
     booking: {
       id: data.id,
-      serviceName: data.services?.name ?? '',
+      serviceName: data.services[0]?.name ?? '',
     },
   }
 }

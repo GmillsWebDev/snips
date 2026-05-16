@@ -5,8 +5,8 @@
   let { data }: { data: PageData } = $props()
   let { shop, booking } = data
 
-  const service  = booking.services as { name: string; duration_minutes: number; price_pence: number }
-  const customer = booking.customers as { first_name: string; last_name: string; email: string; phone: string }
+  const service  = booking.services[0] as { name: string; duration_minutes: number; price_pence: number }
+  const customer = booking.customers[0] as { first_name: string; last_name: string; email: string; phone: string }
 
   function formatDateTime(iso: string, tz: string): string {
     return new Intl.DateTimeFormat('en-GB', {

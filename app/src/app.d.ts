@@ -11,6 +11,13 @@ declare global {
       user: User | null
     }
   }
+
+  interface Window {
+    gtagLoaded?: boolean
+    csqLoaded?: boolean
+    hj?: ((...args: unknown[]) => void) & { q?: unknown[][] }
+    _hjSettings?: { hjid: string | number }
+  }
 }
 
 export {}

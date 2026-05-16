@@ -122,13 +122,13 @@ export const load: PageServerLoad = async ({ parent, url }) => {
     endAt: b.end_at,
     date: formatDate(b.start_at),
     time: formatTime(b.start_at),
-    customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
-    customerEmail: b.customers?.email ?? '',
-    customerPhone: b.customers?.phone ?? '',
-    serviceName: b.services?.name ?? '',
-    barberName: b.barbers?.name ?? '',
+    customerName: `${b.customers[0]?.first_name ?? ''} ${b.customers[0]?.last_name ?? ''}`.trim(),
+    customerEmail: b.customers[0]?.email ?? '',
+    customerPhone: b.customers[0]?.phone ?? '',
+    serviceName: b.services[0]?.name ?? '',
+    barberName: b.barbers[0]?.name ?? '',
     status: b.status as BookingStatus,
-    pricePence: b.services?.price_pence ?? 0,
+    pricePence: b.services[0]?.price_pence ?? 0,
   }))
 
   return {

@@ -22,7 +22,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
     // PGRST116 = no rows — slug doesn't exist or shop is inactive.
     // Let the page server handle the 404; layout just skips branding.
     if (error && error.code !== 'PGRST116') throw error
-    branding = data?.client_branding ?? null
+    branding = data?.client_branding?.[0] ?? null
   } else if (user) {
     const { data: shopId, error: rpcError } = await supabase.rpc('get_my_shop_id')
     if (rpcError) throw rpcError
