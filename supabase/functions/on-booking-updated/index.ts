@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
             booking_id: booking.id,
             type: "accepted",
             channel: "email",
+            status: "sent",
           });
         }
         break;
@@ -101,6 +102,7 @@ Deno.serve(async (req) => {
             booking_id: booking.id,
             type: "rejected",
             channel: "email",
+            status: "sent",
           });
         }
         break;
@@ -120,6 +122,7 @@ Deno.serve(async (req) => {
             booking_id: booking.id,
             type: "cancelled",
             channel: "email",
+            status: "sent",
           });
         }
 
@@ -150,6 +153,7 @@ Deno.serve(async (req) => {
             booking_id: booking.id,
             type: "review_invite",
             channel: "email",
+            status: "sent",
           });
         }
         break;

@@ -69,6 +69,7 @@ Deno.serve(async (req) => {
       booking_id: booking.id,
       type: "confirmation",
       channel: "email",
+      status: "sent",
     });
 
     if (fullBooking.shop.shop_preferences?.auto_accept) {
