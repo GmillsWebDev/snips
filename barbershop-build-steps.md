@@ -7,7 +7,7 @@
 - [x] 1.2 Write and run all schema migrations (tables, indexes, constraints)
 - [x] 1.3 Configure Row Level Security policies for all tables
 - [x] 1.4 Set up Supabase Auth (email/password + magic link)
-- [ ] 1.5 Write Edge Functions (booking created, booking updated, available slots, reminders cron, expire pending cron, waitlist notify)
+- [x] 1.5 Write Edge Functions — built: `on-booking-created`, `on-booking-updated`, `send-reminders` (daily cron), `extend-recurring-blocks` (daily cron), `get-available-slots` (HTTP), `send-guest-booking-link`. Remaining: `expire-pending`, `notify-waitlist`
 - [ ] 1.6 Configure DB webhooks to trigger Edge Functions
 
 ---
@@ -27,7 +27,7 @@
 - [x] 3.3 Date & time picker (calls `get-available-slots` Edge Function)
 - [x] 3.4 Customer details step (guest or login)
 - [x] 3.5 Booking confirmation page
-- [ ] 3.6 Guest magic link email via Brevo
+- [x] 3.6 Guest magic link email via Resend (`send-guest-booking-link` edge function)
 
 ---
 
@@ -59,11 +59,11 @@
 ---
 
 ## 7 — Resend Notifications
-- [ ] 7.1 Configure Resend account, API key, sender domain
-- [ ] 7.2 Build all email templates (confirmation, accepted, rejected, cancelled, reminder, review invite, waitlist)
-- [ ] 7.3 Wire templates to Edge Function triggers
-- [ ] 7.4 24hr reminder cron job
-- [ ] 7.5 Notification log recording & admin history view
+- [x] 7.1 Configure Resend account, API key, sender domain. Shared `sendEmail` helper at `supabase/functions/_shared/sendEmail.ts`. Test function: `test-resend-connection`.
+- [x] 7.2 Build all email templates — 7 templates in `supabase/functions/_templates/`: `bookingConfirmation`, `bookingAccepted`, `bookingRejected`, `bookingCancelled`, `bookingReminder`, `reviewInvite`, `waitlistNotification`. Each exports `getSubject()` and the HTML function. Consistent dark-themed inline HTML, brand colour params, no Tailwind.
+- [x] 7.3 Wire templates to Edge Function triggers — `on-booking-created` fires confirmation + owner alert (if not auto-accept); `on-booking-updated` fires accepted / rejected / cancelled / review-invite based on new status.
+- [x] 7.4 24hr reminder cron job — `send-reminders` runs daily at 7am UTC; deduplicates via `notification_log`; respects `email_reminders` preference.
+- [x] 7.5 Notification log recording & admin history view — all sends logged to `notification_log` with `type`, `channel`, `status: 'sent'`, `sent_at`. Admin booking detail page shows a "Notification history" panel listing all logged notifications with type, channel, timestamp, and status badge. Panel sits side-by-side with "Other bookings" on desktop, stacks on mobile, and expands full-width if the customer has no other bookings.
 
 ---
 

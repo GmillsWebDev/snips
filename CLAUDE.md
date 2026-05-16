@@ -436,6 +436,8 @@ Functions with many branches (> ~15 decision points) are flagged as very-high ri
 - ❌ Do not call bare `redirect()` — always `return redirect(...)` (JS-0045)
 - ❌ Do not use `+` for string interpolation — always use template literals (JS-0246)
 - ❌ Do not mark shorthand action delegates `async` if the wrapper has no `await` (JS-0116)
+- ❌ Do not change `?.` accessors to `[0]?.` on Supabase join fields to fix TypeScript errors — this breaks many-to-one joins at runtime. Add `as unknown as T | null` casts instead (see "Supabase TypeScript Join Types" section)
+- ❌ Do not use `email_enabled` as a column name on `customer_notification_preferences` — the correct columns are `email_confirmations` and `email_reminders`
 
 ---
 
@@ -460,7 +462,12 @@ Steps completed through build checklist:
 - [x] 6.2 Availability rules (per barber, per day of week, split shifts)
 - [x] 6.3 Blocked slots UI (one-off full day, custom range, recurring breaks, expiry alerts, auto-extend cron)
 - [x] 6.4 Shop settings — UI complete (booking preferences form, branding section with contrast checker)
-- [ ] 7+ — Notifications, polish, multi-barber, payments
+- [x] 7.1 Resend account configured; shared `sendEmail` helper at `supabase/functions/_shared/sendEmail.ts`
+- [x] 7.2 All 7 email templates built in `supabase/functions/_templates/`
+- [x] 7.3 Templates wired to `on-booking-created` and `on-booking-updated` edge functions
+- [x] 7.4 24hr reminder cron (`send-reminders`) with deduplication via `notification_log`
+- [x] 7.5 Notification log recording; admin booking detail page shows notification history panel
+- [ ] 8+ — Polish, multi-barber, payments
 
 ---
 
@@ -528,6 +535,80 @@ Used in the branding settings section to show live ratio, badge, and detail text
 - Edit and delete on recurring series ask: this occurrence only, or this and all future
 - Creating or editing blocks that overlap upcoming bookings triggers a warning with a count before confirming
 - `getExpiringRecurrences.ts` is a shared server helper (`$lib/server/`) used by both the dashboard and blocked-slots load functions
+
+### Notification System (Resend / Step 7)
+
+**Email templates** — 7 files in `supabase/functions/_templates/`, each exporting `getSubject()` and a named HTML function:
+
+| Template | Trigger |
+|---|---|
+| `bookingConfirmation` | Booking created (always) |
+| `bookingAccepted` | Status → `accepted` |
+| `bookingRejected` | Status → `rejected` |
+| `bookingCancelled` | Status → `cancelled` |
+| `bookingReminder` | Daily cron, 24hr before appointment |
+| `reviewInvite` | Status → `completed` |
+| `waitlistNotification` | Waitlist promotion |
+
+All templates use dark-themed inline HTML with brand colour params. No Tailwind, no external CSS.
+
+**Edge function pattern** (all notification-sending functions follow this):
+1. Check `customer_notification_preferences` — bail if pref is `false`
+2. Fetch `client_branding` for brand colours
+3. Format date/time using `Intl.DateTimeFormat` with shop timezone
+4. Call `sendEmail(...)` from `_shared/sendEmail.ts`
+5. Insert a row into `notification_log`
+
+**`customer_notification_preferences` columns:**
+- `email_confirmations` — controls confirmation/accepted/rejected/cancelled/review emails
+- `email_reminders` — controls the 24hr reminder only
+- **NOT** `email_enabled` — that column does not exist
+
+**`notification_log` schema:** `id`, `booking_id`, `customer_id`, `type` (matches template name), `channel` (`'email'`), `status` (`'sent'`), `sent_at`
+
+**`send-reminders` cron:** Runs daily at 7am UTC. Queries bookings starting between 23–25hr from now. Deduplicates by checking `notification_log` for an existing `type = 'bookingReminder'` row for that booking. Respects `email_reminders` preference.
+
+**Admin booking detail:** Shows a "Notification history" panel listing all `notification_log` rows for the booking — type, channel, timestamp, status badge. Sits alongside the "Other bookings" panel on desktop; stacks on mobile.
+
+### Supabase TypeScript Join Types — Critical Pattern
+
+**Background:** Without generated Supabase types, TypeScript infers all embedded join results as arrays (`T[]`), regardless of the actual FK direction. This causes a mismatch: TypeScript says array, runtime gives a single object (or `null`).
+
+**The FK direction rule:**
+- **Many-to-one** (FK is on the *querying* table, e.g. `bookings.customer_id → customers`): runtime returns a **single object or null**. TypeScript (wrongly) infers `T[]`.
+- **One-to-many** (FK is on the *related* table, e.g. `shops.id ← client_branding.shop_id`): runtime returns an **array**. TypeScript (correctly) infers `T[]`.
+
+**Correct fix for many-to-one joins — add a cast, keep `?.` accessor:**
+
+```typescript
+// TypeScript says customers is an array — but runtime gives a single object.
+// ✅ Correct: cast at the use site
+customerName: (b.customers as unknown as { first_name: string; last_name: string } | null)
+  ?.first_name ?? ''
+
+// Or define a local type and cast the whole row:
+type JoinedRow = {
+  id: string
+  customers: { first_name: string; last_name: string } | null
+  services: { name: string } | null
+}
+const rows = (data ?? []) as unknown as JoinedRow[]
+```
+
+**One-to-many joins (genuinely arrays) — use `[0]?.`:**
+```typescript
+// shops → client_branding and shops → shop_preferences are truly one-to-many
+const branding = data?.client_branding?.[0] ?? null
+const bookingWindow = shopRaw.shop_preferences?.[0]?.booking_window_days ?? 30
+```
+
+**NEVER do this to fix a TypeScript join error:**
+```typescript
+// ❌ Wrong — satisfies TypeScript but breaks runtime for many-to-one joins
+data.customers[0]?.first_name   // runtime: customers IS an object, not an array → undefined
+```
+
+The runtime breakdown only shows up visually (fields render as blank/undefined), not as a thrown error, making it easy to miss in testing.
 
 ---
 
