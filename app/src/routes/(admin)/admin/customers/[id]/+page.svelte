@@ -6,9 +6,18 @@
   let { data, form }: { data: PageData; form: ActionData } = $props()
 
   let adjustSubmitting = $state(false)
+  let customerLoyaltyPoints = $state(data.customer.loyaltyPoints)
+  let confirmingTierId = $state<string | null>(null)
+  let redeemSubmitting = $state(false)
+  let redeemResult = $state<{ tierName: string; newBalance: number } | null>(null)
 
-  function eventLabel(reason: string, serviceName: string | null): string {
+  $effect(() => {
+    customerLoyaltyPoints = data.customer.loyaltyPoints
+  })
+
+  function eventLabel(reason: string, serviceName: string | null, note: string | null = null): string {
     if (reason === 'booking_completed') return `Earned — ${serviceName ?? 'booking'}`
+    if (reason === 'redeemed') return `Redeemed — ${note ?? 'reward'}`
     return 'Manual adjustment'
   }
 </script>
@@ -47,7 +56,7 @@
       <div class="loyalty-panel__header">
         <h2 class="card__title">Loyalty Points</h2>
         <div class="loyalty-balance">
-          <span class="loyalty-balance__number">{data.customer.loyaltyPoints}</span>
+          <span class="loyalty-balance__number">{customerLoyaltyPoints}</span>
           <span class="loyalty-balance__label">points</span>
         </div>
       </div>
@@ -107,6 +116,90 @@
         </form>
       </div>
 
+      <!-- Redeem points -->
+      {#if data.rewardTiers.length > 0}
+        <div class="redeem-section">
+          <h3 class="redeem-section__title">Redeem Points</h3>
+
+          {#if redeemResult}
+            <p class="redeem-success">
+              Redeemed — {redeemResult.tierName}. New balance: {redeemResult.newBalance} points.
+            </p>
+          {/if}
+
+          {#if form?.redeemError}
+            <p class="adjust-error">{form.redeemError}</p>
+          {/if}
+
+          <ul class="redeem-tiers">
+            {#each data.rewardTiers as tier (tier.id)}
+              {@const canRedeem = customerLoyaltyPoints >= tier.points_required}
+              <li class="redeem-tier-item">
+                <button
+                  type="button"
+                  class="redeem-tier-btn"
+                  class:redeem-tier-btn--insufficient={!canRedeem}
+                  disabled={!canRedeem || redeemSubmitting}
+                  onclick={() => { confirmingTierId = confirmingTierId === tier.id ? null : tier.id }}
+                >
+                  <span class="redeem-tier-btn__info">
+                    <span class="redeem-tier-btn__name">{tier.name}</span>
+                    <span class="redeem-tier-btn__pts">{tier.points_required} pts</span>
+                    <span class="redeem-tier-btn__desc">{tier.reward_description}</span>
+                  </span>
+                  {#if !canRedeem}
+                    <span class="redeem-tier-btn__insufficient">Insufficient points</span>
+                  {/if}
+                </button>
+
+                {#if confirmingTierId === tier.id && canRedeem}
+                  <div class="confirm-redeem">
+                    <p class="confirm-redeem__text">
+                      Redeem {tier.points_required} pts for <strong>{tier.name}</strong>?
+                      Customer will have <strong>{customerLoyaltyPoints - tier.points_required}</strong> pts after redemption.
+                    </p>
+                    <div class="confirm-redeem__actions">
+                      <form
+                        method="POST"
+                        action="?/redeemPoints"
+                        use:enhance={() => {
+                          redeemSubmitting = true
+                          return async ({ result, update }) => {
+                            redeemSubmitting = false
+                            confirmingTierId = null
+                            if (result.type === 'success') {
+                              const d = result.data as Record<string, unknown>
+                              if (d?.redeemSuccess) {
+                                customerLoyaltyPoints = d.newBalance as number
+                                redeemResult = { tierName: d.tierName as string, newBalance: d.newBalance as number }
+                                setTimeout(() => { redeemResult = null }, 5000)
+                              }
+                            }
+                            await update()
+                          }
+                        }}
+                      >
+                        <input type="hidden" name="tierId" value={tier.id} />
+                        <Button type="submit" size="sm" edges="soft" disabled={redeemSubmitting} loading={redeemSubmitting}>
+                          {redeemSubmitting ? 'Processing…' : 'Confirm'}
+                        </Button>
+                      </form>
+                      <button
+                        type="button"
+                        class="confirm-redeem__cancel"
+                        onclick={() => { confirmingTierId = null }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {/if}
+
       <!-- Points history -->
       <div class="points-log">
         <h3 class="points-log__title">Points History</h3>
@@ -126,11 +219,12 @@
               {#each data.loyaltyLog as entry (entry.id)}
                 <tr>
                   <td class="log-table__date">{entry.createdAt}</td>
-                  <td>{eventLabel(entry.reason, entry.serviceName)}</td>
+                  <td>{eventLabel(entry.reason, entry.serviceName, entry.note)}</td>
                   <td
                     class="log-table__points log-table__col--right"
                     class:log-table__points--positive={entry.change > 0}
-                    class:log-table__points--negative={entry.change < 0}
+                    class:log-table__points--negative={entry.change < 0 && entry.reason !== 'redeemed'}
+                    class:log-table__points--redeemed={entry.change < 0 && entry.reason === 'redeemed'}
                   >
                     {entry.change > 0 ? `+${entry.change}` : `${entry.change}`}
                   </td>
@@ -419,8 +513,150 @@
     color: var(--color-rejected-text);
   }
 
+  .log-table__points--redeemed {
+    color: #d97706;
+  }
+
   .log-table__note {
     color: var(--color-text-muted);
     font-size: var(--font-size-xs);
+  }
+
+  /* ── Redeem section ───────────────────────────────── */
+
+  .redeem-section {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .redeem-section__title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+  }
+
+  .redeem-success {
+    font-size: var(--font-size-sm);
+    color: var(--color-accepted-text);
+    background: var(--color-accepted-bg);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .redeem-tiers {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .redeem-tier-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .redeem-tier-btn {
+    width: 100%;
+    text-align: left;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: none;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-sans);
+
+    &:hover:not(:disabled) {
+      border-color: var(--color-primary);
+      background: var(--color-bg);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+
+    &--insufficient {
+      opacity: 0.55;
+    }
+  }
+
+  .redeem-tier-btn__info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1;
+    flex-wrap: wrap;
+  }
+
+  .redeem-tier-btn__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .redeem-tier-btn__pts {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .redeem-tier-btn__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .redeem-tier-btn__insufficient {
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .confirm-redeem {
+    padding: var(--space-3) var(--space-3);
+    background: var(--color-bg);
+    border: 1px solid var(--color-primary);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .confirm-redeem__text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    line-height: 1.5;
+  }
+
+  .confirm-redeem__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .confirm-redeem__cancel {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+    font-family: var(--font-sans);
+
+    &:hover {
+      color: var(--color-text);
+    }
   }
 </style>

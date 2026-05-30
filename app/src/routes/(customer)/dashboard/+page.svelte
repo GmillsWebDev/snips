@@ -41,6 +41,7 @@
 
   function eventLabel(reason: string): string {
     if (reason === 'booking_completed') return 'Booking completed'
+    if (reason === 'redeemed') return 'Redeemed'
     return 'Adjustment'
   }
 </script>
@@ -176,7 +177,8 @@
               <span
                 class="points-log__change"
                 class:points-log__change--positive={entry.change > 0}
-                class:points-log__change--negative={entry.change < 0}
+                class:points-log__change--negative={entry.change < 0 && entry.reason !== 'redeemed'}
+                class:points-log__change--redeemed={entry.change < 0 && entry.reason === 'redeemed'}
               >
                 {entry.change > 0 ? `+${entry.change}` : `${entry.change}`} pts
               </span>
@@ -507,5 +509,9 @@
 
   .points-log__change--negative {
     color: var(--color-rejected-text);
+  }
+
+  .points-log__change--redeemed {
+    color: #d97706;
   }
 </style>

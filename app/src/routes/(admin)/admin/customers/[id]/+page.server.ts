@@ -44,6 +44,14 @@ export type CustomerDetail = {
   createdAt: string
 }
 
+export type RewardTier = {
+  id: string
+  name: string
+  points_required: number
+  reward_description: string
+  reward_value_pence: number | null
+}
+
 export const load: PageServerLoad = async ({ parent, params }) => {
   const { role } = await parent()
   const shopId = role.shop_id
@@ -59,7 +67,7 @@ export const load: PageServerLoad = async ({ parent, params }) => {
 
   if (customerErr || !customer) error(404, 'Customer not found')
 
-  const [loyaltyPrefsResult, loyaltyLogResult] = await Promise.all([
+  const [loyaltyPrefsResult, loyaltyLogResult, tiersResult] = await Promise.all([
     admin
       .from('shop_preferences')
       .select('loyalty_enabled')
@@ -70,6 +78,12 @@ export const load: PageServerLoad = async ({ parent, params }) => {
       .select('id, change, reason, note, created_at, bookings ( start_at, services ( name ) )')
       .eq('customer_id', customerId)
       .order('created_at', { ascending: false }),
+    admin
+      .from('loyalty_reward_tiers')
+      .select('id, name, points_required, reward_description, reward_value_pence')
+      .eq('shop_id', shopId)
+      .eq('is_active', true)
+      .order('points_required', { ascending: true }),
   ])
 
   const loyaltyEnabled = loyaltyPrefsResult.data?.loyalty_enabled ?? false
@@ -95,6 +109,7 @@ export const load: PageServerLoad = async ({ parent, params }) => {
     } satisfies CustomerDetail,
     loyaltyEnabled,
     loyaltyLog,
+    rewardTiers: (tiersResult.data ?? []) as RewardTier[],
   }
 }
 
@@ -156,5 +171,69 @@ export const actions: Actions = {
     if (updateErr) return fail(500, { message: 'Failed to update balance.' })
 
     return { adjustSuccess: true }
+  },
+
+  redeemPoints: async ({ params, request, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(403, { redeemError: 'Not authenticated' })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail(403, { redeemError: 'Not authorized' })
+
+    const formData = await request.formData()
+    const tierId = String(formData.get('tierId') ?? '').trim()
+    if (!tierId) return fail(400, { redeemError: 'Missing tier ID.' })
+
+    const admin = createSupabaseAdminClient()
+    const customerId = params.id
+    const shopId = role.shop_id
+
+    const { data: tier, error: tierErr } = await admin
+      .from('loyalty_reward_tiers')
+      .select('name, points_required')
+      .eq('id', tierId)
+      .eq('shop_id', shopId)
+      .eq('is_active', true)
+      .single()
+
+    if (tierErr || !tier) return fail(400, { redeemError: 'Reward tier not found or inactive.' })
+
+    const { data: customer, error: customerErr } = await admin
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', customerId)
+      .eq('shop_id', shopId)
+      .single()
+
+    if (customerErr || !customer) return fail(400, { redeemError: 'Customer not found.' })
+
+    if ((customer.loyalty_points ?? 0) < tier.points_required) {
+      return fail(400, { redeemError: 'Customer does not have enough points.' })
+    }
+
+    const newBalance = (customer.loyalty_points ?? 0) - tier.points_required
+
+    const { error: logErr } = await admin
+      .from('loyalty_points_log')
+      .insert({
+        customer_id: customerId,
+        shop_id: shopId,
+        booking_id: null,
+        change: -tier.points_required,
+        reason: 'redeemed',
+        note: tier.name,
+      })
+
+    if (logErr) return fail(500, { redeemError: 'Failed to record redemption.' })
+
+    const { error: updateErr } = await admin
+      .from('customers')
+      .update({ loyalty_points: newBalance })
+      .eq('id', customerId)
+      .eq('shop_id', shopId)
+
+    if (updateErr) return fail(500, { redeemError: 'Failed to update balance.' })
+
+    return { redeemSuccess: true, newBalance, tierName: tier.name }
   },
 }
