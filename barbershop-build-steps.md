@@ -68,13 +68,15 @@
 ---
 
 ## 8 — Polish & V1 Features
-- [ ] 8.1 Reviews display (public page + admin visibility toggle)
-- [ ] 8.2 Loyalty points tracking
-- [ ] 8.3 Discount codes (CRUD + validation at booking)
+- [x] 8.1 Reviews display (public page + admin visibility toggle)
+- [x] 8.2 Loyalty points tracking (earn on completed bookings, admin manual adjust, reward tiers with redemption on admin booking and customer detail pages, customer dashboard points card with log)
+- [x] 8.3 Discount codes (CRUD + validation at booking)
 - [ ] 8.4 Analytics dashboard (bookings, revenue, no-shows, popular services)
 - [ ] 8.5 Weekly calendar view in admin
 - [ ] 8.6 CSV export of bookings
 - [ ] 8.7 Waitlist feature end-to-end
+- [ ] 8.8 Mobile-optimised colour picker for branding settings
+- [ ] 8.9 Loyalty tier–reached email notification & admin notification channel settings panel
 
 ---
 

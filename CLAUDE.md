@@ -467,7 +467,19 @@ Steps completed through build checklist:
 - [x] 7.3 Templates wired to `on-booking-created` and `on-booking-updated` edge functions
 - [x] 7.4 24hr reminder cron (`send-reminders`) with deduplication via `notification_log`
 - [x] 7.5 Notification log recording; admin booking detail page shows notification history panel
-- [ ] 8+ — Polish, multi-barber, payments
+- [x] 8.1 Reviews display (public page + admin visibility toggle)
+- [x] 8.2 Loyalty points tracking — earn on `booking_completed`, admin manual adjust, reward tiers (CRUD in settings), redemption on admin booking detail + customer detail pages, customer dashboard points card with log; amber/green/red colour distinction in log
+- [x] 8.3 Discount codes (CRUD + validation at booking)
+- [ ] 8.4 Analytics dashboard (bookings, revenue, no-shows, popular services)
+- [ ] 8.5 Weekly calendar view in admin
+- [ ] 8.6 CSV export of bookings
+- [ ] 8.7 Waitlist feature end-to-end
+- [ ] 8.8 Mobile-optimised colour picker for branding settings
+- [ ] 8.9 Loyalty tier–reached email notification & admin notification channel settings panel
+- [ ] 9+ — Multi-barber expansion
+- [ ] 10+ — Payments (Stripe)
+
+Section 8 is in progress. Steps 8.1, 8.2, and 8.3 are complete. Next step is 8.4 Analytics dashboard.
 
 ---
 

@@ -170,6 +170,96 @@
     </section>
   {/if}
 
+  <!-- ── Loyalty Redemption ─────────────────────────── -->
+  {#if data.loyaltyEnabled && data.rewardTiers.length > 0}
+    <section class="card redemption-panel">
+      <h2 class="card__title">Loyalty Redemption</h2>
+
+      <div class="redemption-balance">
+        <span class="redemption-balance__pts">{loyaltyPoints}</span>
+        <span class="redemption-balance__label">points available</span>
+      </div>
+
+      {#if redeemResult}
+        <p class="redemption-success">
+          Redeemed — {redeemResult.tierName}. New balance: {redeemResult.newBalance} points.
+        </p>
+      {/if}
+
+      {#if form?.redeemError}
+        <p class="redemption-error">{form.redeemError}</p>
+      {/if}
+
+      <ul class="redemption-tiers">
+        {#each data.rewardTiers as tier (tier.id)}
+          {@const canRedeem = loyaltyPoints >= tier.points_required}
+          <li class="redemption-tier-item">
+            <button
+              type="button"
+              class="redemption-tier-btn"
+              class:redemption-tier-btn--insufficient={!canRedeem}
+              disabled={!canRedeem || redeemSubmitting}
+              onclick={() => { confirmingTierId = confirmingTierId === tier.id ? null : tier.id }}
+            >
+              <span class="redemption-tier-btn__info">
+                <span class="redemption-tier-btn__name">{tier.name}</span>
+                <span class="redemption-tier-btn__pts">{tier.points_required} pts</span>
+                <span class="redemption-tier-btn__desc">{tier.reward_description}</span>
+              </span>
+              {#if !canRedeem}
+                <span class="redemption-tier-btn__insufficient">Insufficient points</span>
+              {/if}
+            </button>
+
+            {#if confirmingTierId === tier.id && canRedeem}
+              <div class="confirm-redeem">
+                <p class="confirm-redeem__text">
+                  Redeem {tier.points_required} pts for <strong>{tier.name}</strong>?
+                  Customer will have <strong>{loyaltyPoints - tier.points_required}</strong> pts after redemption.
+                </p>
+                <div class="confirm-redeem__actions">
+                  <form
+                    method="POST"
+                    action="?/redeemPoints"
+                    use:enhance={() => {
+                      redeemSubmitting = true
+                      return async ({ result, update }) => {
+                        redeemSubmitting = false
+                        confirmingTierId = null
+                        if (result.type === 'success') {
+                          const d = result.data as Record<string, unknown>
+                          if (d?.redeemSuccess) {
+                            loyaltyPoints = d.newBalance as number
+                            redeemResult = { tierName: d.tierName as string, newBalance: d.newBalance as number }
+                            setTimeout(() => { redeemResult = null }, 5000)
+                          }
+                        }
+                        await update()
+                      }
+                    }}
+                  >
+                    <input type="hidden" name="tierId" value={tier.id} />
+                    <input type="hidden" name="customerId" value={data.booking.customerId} />
+                    <Button type="submit" size="sm" edges="soft" disabled={redeemSubmitting} loading={redeemSubmitting}>
+                      {redeemSubmitting ? 'Processing…' : 'Confirm'}
+                    </Button>
+                  </form>
+                  <button
+                    type="button"
+                    class="confirm-redeem__cancel"
+                    onclick={() => { confirmingTierId = null }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   <div class="detail-grid">
 
     <!-- ── Customer ───────────────────────────────────── -->
@@ -346,96 +436,6 @@
       {/if}
     </section>
   </div>
-
-  <!-- ── Loyalty Redemption ─────────────────────────── -->
-  {#if data.loyaltyEnabled && data.rewardTiers.length > 0}
-    <section class="card redemption-panel">
-      <h2 class="card__title">Loyalty Redemption</h2>
-
-      <div class="redemption-balance">
-        <span class="redemption-balance__pts">{loyaltyPoints}</span>
-        <span class="redemption-balance__label">points available</span>
-      </div>
-
-      {#if redeemResult}
-        <p class="redemption-success">
-          Redeemed — {redeemResult.tierName}. New balance: {redeemResult.newBalance} points.
-        </p>
-      {/if}
-
-      {#if form?.redeemError}
-        <p class="redemption-error">{form.redeemError}</p>
-      {/if}
-
-      <ul class="redemption-tiers">
-        {#each data.rewardTiers as tier (tier.id)}
-          {@const canRedeem = loyaltyPoints >= tier.points_required}
-          <li class="redemption-tier-item">
-            <button
-              type="button"
-              class="redemption-tier-btn"
-              class:redemption-tier-btn--insufficient={!canRedeem}
-              disabled={!canRedeem || redeemSubmitting}
-              onclick={() => { confirmingTierId = confirmingTierId === tier.id ? null : tier.id }}
-            >
-              <span class="redemption-tier-btn__info">
-                <span class="redemption-tier-btn__name">{tier.name}</span>
-                <span class="redemption-tier-btn__pts">{tier.points_required} pts</span>
-                <span class="redemption-tier-btn__desc">{tier.reward_description}</span>
-              </span>
-              {#if !canRedeem}
-                <span class="redemption-tier-btn__insufficient">Insufficient points</span>
-              {/if}
-            </button>
-
-            {#if confirmingTierId === tier.id && canRedeem}
-              <div class="confirm-redeem">
-                <p class="confirm-redeem__text">
-                  Redeem {tier.points_required} pts for <strong>{tier.name}</strong>?
-                  Customer will have <strong>{loyaltyPoints - tier.points_required}</strong> pts after redemption.
-                </p>
-                <div class="confirm-redeem__actions">
-                  <form
-                    method="POST"
-                    action="?/redeemPoints"
-                    use:enhance={() => {
-                      redeemSubmitting = true
-                      return async ({ result, update }) => {
-                        redeemSubmitting = false
-                        confirmingTierId = null
-                        if (result.type === 'success') {
-                          const d = result.data as Record<string, unknown>
-                          if (d?.redeemSuccess) {
-                            loyaltyPoints = d.newBalance as number
-                            redeemResult = { tierName: d.tierName as string, newBalance: d.newBalance as number }
-                            setTimeout(() => { redeemResult = null }, 5000)
-                          }
-                        }
-                        await update()
-                      }
-                    }}
-                  >
-                    <input type="hidden" name="tierId" value={tier.id} />
-                    <input type="hidden" name="customerId" value={data.booking.customerId} />
-                    <Button type="submit" size="sm" edges="soft" disabled={redeemSubmitting} loading={redeemSubmitting}>
-                      {redeemSubmitting ? 'Processing…' : 'Confirm'}
-                    </Button>
-                  </form>
-                  <button
-                    type="button"
-                    class="confirm-redeem__cancel"
-                    onclick={() => { confirmingTierId = null }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
 
   <!-- ── Internal notes ──────────────────────────────── -->
   <section class="notes-panel">
