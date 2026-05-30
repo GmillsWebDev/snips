@@ -10,6 +10,9 @@ export type ShopPreferences = {
   auto_accept: boolean
   deposit_required: boolean
   show_shop_page: boolean
+  loyalty_enabled: boolean
+  loyalty_points_per_booking: number | null
+  loyalty_points_per_pence: number | null
 }
 
 export type ShopDisplaySettings = {
@@ -48,7 +51,7 @@ export const load: PageServerLoad = async ({ parent }) => {
   ] = await Promise.all([
     admin
       .from('shop_preferences')
-      .select('id, booking_window_days, buffer_minutes, auto_accept, deposit_required, show_shop_page')
+      .select('id, booking_window_days, buffer_minutes, auto_accept, deposit_required, show_shop_page, loyalty_enabled, loyalty_points_per_booking, loyalty_points_per_pence')
       .eq('shop_id', role.shop_id)
       .single(),
     admin
@@ -177,6 +180,61 @@ export const actions: Actions = {
       .eq('shop_id', role.shop_id)
 
     if (updateErr) { const brandingErrors: BrandingErrors = { form: 'Failed to save branding. Please try again.' }; return fail(500, { brandingErrors }) }
+
+    return redirect(303, '/admin/settings?saved=1')
+  },
+
+  updateLoyalty: async ({ request, locals }) => {
+    type LoyaltyErrors = { form?: string; pointsPerBooking?: string; pointsPerPence?: string }
+
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail<{ loyaltyErrors: LoyaltyErrors }>(403, { loyaltyErrors: { form: 'Not authenticated' } })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail<{ loyaltyErrors: LoyaltyErrors }>(403, { loyaltyErrors: { form: 'Not authorized' } })
+
+    const formData = await request.formData()
+    const loyaltyEnabled = formData.get('loyaltyEnabled') === 'on'
+    const rawPerBooking = String(formData.get('pointsPerBooking') ?? '').trim()
+    const rawPerPence   = String(formData.get('pointsPerPence')   ?? '').trim()
+
+    const loyaltyErrors: LoyaltyErrors = {}
+
+    let pointsPerBooking: number | null = null
+    if (rawPerBooking !== '') {
+      const v = parseInt(rawPerBooking, 10)
+      if (isNaN(v) || v < 0) loyaltyErrors.pointsPerBooking = 'Must be a positive whole number'
+      else if (v > 0) pointsPerBooking = v
+      // v === 0 treated as null (same as leaving blank — disables this earning method)
+    }
+
+    let pointsPerPence: number | null = null
+    if (rawPerPence !== '') {
+      const v = parseInt(rawPerPence, 10)
+      if (isNaN(v) || v < 0) loyaltyErrors.pointsPerPence = 'Must be a positive whole number'
+      else if (v > 0) pointsPerPence = v
+      // v === 0 treated as null (same as leaving blank — disables this earning method)
+    }
+
+    if (Object.keys(loyaltyErrors).length > 0) {
+      return fail(400, {
+        loyaltyErrors,
+        loyaltyValues: { pointsPerBooking: rawPerBooking, pointsPerPence: rawPerPence },
+      })
+    }
+
+    const admin = createSupabaseAdminClient()
+
+    const { error: updateErr } = await admin
+      .from('shop_preferences')
+      .update({
+        loyalty_enabled: loyaltyEnabled,
+        loyalty_points_per_booking: pointsPerBooking,
+        loyalty_points_per_pence: pointsPerPence,
+      })
+      .eq('shop_id', role.shop_id)
+
+    if (updateErr) return fail(500, { loyaltyErrors: { form: 'Failed to save loyalty settings. Please try again.' } })
 
     return redirect(303, '/admin/settings?saved=1')
   },

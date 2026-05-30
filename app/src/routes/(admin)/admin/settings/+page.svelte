@@ -28,6 +28,12 @@
   let bypassWarning = $state(false)
   let brandingFormEl: HTMLFormElement | null = null
 
+  let loyaltyEnabled = $state(data.preferences.loyalty_enabled)
+  let loyaltySubmitting = $state(false)
+  let perBookingValue = $state(data.preferences.loyalty_points_per_booking ?? 0)
+  let perPenceValue = $state(data.preferences.loyalty_points_per_pence ?? 0)
+  let showStackWarning = $derived(loyaltyEnabled && perBookingValue > 0 && perPenceValue > 0)
+
   let ratioPrimary   = $derived(getContrastRatio(pickerPrimary, pickerOnPrimary))
   let ratioSecondary = $derived(getContrastRatio(pickerSecondary, pickerOnSecondary))
   let contrastPrimary   = $derived(getContrastRating(ratioPrimary))
@@ -54,6 +60,12 @@
     hexOnPrimary      = data.branding.color_on_primary.slice(1)
     pickerOnSecondary = data.branding.color_on_secondary
     hexOnSecondary    = data.branding.color_on_secondary.slice(1)
+  })
+
+  $effect(() => {
+    loyaltyEnabled = data.preferences.loyalty_enabled
+    perBookingValue = data.preferences.loyalty_points_per_booking ?? 0
+    perPenceValue = data.preferences.loyalty_points_per_pence ?? 0
   })
 </script>
 
@@ -179,6 +191,118 @@
       <div class="settings-section__footer">
         <Button type="submit" edges="soft" disabled={submitting} loading={submitting}>
           {submitting ? 'Saving…' : 'Save changes'}
+        </Button>
+      </div>
+    </form>
+  </section>
+
+  <!-- ── Loyalty Points ───────────────────────────────── -->
+  <section class="settings-section">
+    <h2 class="settings-section__title">Loyalty Points</h2>
+    <p class="settings-section__subdesc">Reward customers with points when bookings are completed.</p>
+
+    <form
+      method="POST"
+      action="?/updateLoyalty"
+      use:enhance={() => {
+        loyaltySubmitting = true
+        return async ({ update }) => {
+          loyaltySubmitting = false
+          await update()
+        }
+      }}
+    >
+      {#if loyaltyEnabled}
+        <input type="hidden" name="loyaltyEnabled" value="on" />
+      {/if}
+
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Enable loyalty scheme</span>
+          {#if !loyaltyEnabled}
+            <span class="setting-row__desc">
+              Loyalty points are disabled. Enable the scheme to configure earning rules
+              and show points to customers.
+            </span>
+          {/if}
+        </div>
+        <button
+          type="button"
+          class="toggle"
+          class:toggle--on={loyaltyEnabled}
+          onclick={() => { loyaltyEnabled = !loyaltyEnabled }}
+          aria-pressed={loyaltyEnabled}
+          aria-label="Enable loyalty scheme"
+        >
+          <span class="toggle__thumb"></span>
+        </button>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="setting-row" class:setting-row--muted={!loyaltyEnabled}>
+        <div class="setting-row__info">
+          <span class="setting-row__label">Points per completed booking</span>
+          <span class="setting-row__desc">
+            A flat number of points awarded for every completed booking. Leave blank to disable.
+          </span>
+          {#if form?.loyaltyErrors?.pointsPerBooking}
+            <p class="field-error">{form.loyaltyErrors.pointsPerBooking}</p>
+          {/if}
+        </div>
+        <input
+          name="pointsPerBooking"
+          type="number"
+          class="number-input number-input--wide"
+          placeholder="e.g. 5"
+          min="0"
+          step="1"
+          value={form?.loyaltyValues?.pointsPerBooking ?? (data.preferences.loyalty_points_per_booking ?? '')}
+          oninput={(e) => { perBookingValue = (e.currentTarget as HTMLInputElement).valueAsNumber || 0 }}
+          disabled={!loyaltyEnabled}
+        />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="setting-row" class:setting-row--muted={!loyaltyEnabled}>
+        <div class="setting-row__info">
+          <span class="setting-row__label">Points per £___ spent</span>
+          <span class="setting-row__desc">
+            Award 1 point for every X pence spent. Enter 100 for 1 point per £1,
+            or 500 for 1 point per £5. Leave blank to disable.
+          </span>
+          {#if form?.loyaltyErrors?.pointsPerPence}
+            <p class="field-error">{form.loyaltyErrors.pointsPerPence}</p>
+          {/if}
+        </div>
+        <input
+          name="pointsPerPence"
+          type="number"
+          class="number-input number-input--wide"
+          placeholder="e.g. 100"
+          min="0"
+          step="1"
+          value={form?.loyaltyValues?.pointsPerPence ?? (data.preferences.loyalty_points_per_pence ?? '')}
+          oninput={(e) => { perPenceValue = (e.currentTarget as HTMLInputElement).valueAsNumber || 0 }}
+          disabled={!loyaltyEnabled}
+        />
+      </div>
+
+      {#if showStackWarning}
+        <div class="loyalty-stack-warning">
+          Both earning methods are active — customers will earn flat points per booking
+          <strong>and</strong> spend-based points on the same visit.
+        </div>
+      {/if}
+
+      {#if form?.loyaltyErrors?.form}
+        <p class="form-error">{form.loyaltyErrors.form}</p>
+      {/if}
+
+      <div class="settings-section__footer">
+        <Button type="submit" edges="soft" disabled={loyaltySubmitting} loading={loyaltySubmitting}>
+          {loyaltySubmitting ? 'Saving…' : 'Save loyalty settings'}
         </Button>
       </div>
     </form>
@@ -458,6 +582,22 @@
     white-space: nowrap;
   }
 
+  /* ── Section subdesc ──────────────────────────── */
+
+  .settings-section__subdesc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+    line-height: 1.4;
+  }
+
+  /* ── Muted row (disabled loyalty inputs) ───────── */
+
+  .setting-row--muted {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
   /* ── Number input ──────────────────────────────── */
 
   .number-input {
@@ -479,6 +619,15 @@
 
     &--error {
       border-color: var(--color-rejected-text);
+    }
+
+    &--wide {
+      width: 8rem;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   }
 
@@ -549,6 +698,18 @@
     background: var(--color-bg);
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* ── Loyalty stack warning ─────────────────────── */
+
+  .loyalty-stack-warning {
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-pending-bg);
+    color: var(--color-pending-text);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    line-height: 1.5;
   }
 
   /* ── Errors ────────────────────────────────────── */

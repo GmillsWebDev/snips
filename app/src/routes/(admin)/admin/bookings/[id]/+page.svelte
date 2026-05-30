@@ -168,7 +168,11 @@
       <h2 class="card__title">Customer</h2>
       <dl class="detail-list">
         <dt>Name</dt>
-        <dd>{data.booking.customer.name}</dd>
+        <dd>
+          <a href="/admin/customers/{data.booking.customerId}" class="customer-link">
+            {data.booking.customer.name}
+          </a>
+        </dd>
         {#if data.booking.customer.email}
           <dt>Email</dt>
           <dd><a href="mailto:{data.booking.customer.email}">{data.booking.customer.email}</a></dd>
@@ -536,6 +540,14 @@
       &:hover {
         text-decoration: none;
       }
+    }
+  }
+
+  .customer-link {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
     }
   }
 

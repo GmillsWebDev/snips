@@ -29,6 +29,14 @@ export type PastBooking = {
   hasReview: boolean
 }
 
+export type LoyaltyLogEntry = {
+  id: string
+  change: number
+  reason: string
+  createdAt: string
+  serviceName: string | null
+}
+
 const TIMEZONE = 'Europe/London'
 
 function formatDate(iso: string): string {
@@ -48,27 +56,47 @@ function formatTime(iso: string): string {
   })
 }
 
+function formatShortDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', {
+    timeZone: TIMEZONE,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+type RawLoyaltyLogRow = {
+  id: string
+  change: number
+  reason: string
+  created_at: string
+  bookings: { services: { name: string } | null } | null
+}
+
 export const load: PageServerLoad = async ({ locals, parent }) => {
   await parent()
 
   const { user } = await locals.safeGetSession()
   if (!user) return redirect(303, '/login')
 
+  const admin = createSupabaseAdminClient()
+
   const { data: customerByUserId, error: customerError } = await locals.supabase
     .from('customers')
-    .select('id')
+    .select('id, shop_id, loyalty_points')
     .eq('user_id', user.id)
     .maybeSingle()
 
   if (customerError) throw customerError
 
   let customerId: string | null = customerByUserId?.id ?? null
+  let shopId: string | null = customerByUserId?.shop_id ?? null
+  let loyaltyPoints: number = customerByUserId?.loyalty_points ?? 0
 
   if (!customerId && user.email) {
-    const admin = createSupabaseAdminClient()
     const { data: customerByEmail } = await admin
       .from('customers')
-      .select('id')
+      .select('id, shop_id, loyalty_points')
       .eq('email', user.email)
       .maybeSingle()
 
@@ -78,14 +106,25 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
         .update({ user_id: user.id, is_guest: false })
         .eq('id', customerByEmail.id)
       customerId = customerByEmail.id
+      shopId = customerByEmail.shop_id
+      loyaltyPoints = customerByEmail.loyalty_points ?? 0
     }
   }
 
-  if (!customerId) return { upcomingBookings: [] as UpcomingBooking[], pastBookings: [] as PastBooking[] }
+  if (!customerId) {
+    return {
+      upcomingBookings: [] as UpcomingBooking[],
+      pastBookings: [] as PastBooking[],
+      loyaltyEnabled: false,
+      loyaltyPoints: 0,
+      loyaltyLog: [] as LoyaltyLogEntry[],
+    }
+  }
 
   const now = new Date().toISOString()
+  const custShopId = shopId ?? ''
 
-  const [upcomingResult, pastResult] = await Promise.all([
+  const [upcomingResult, pastResult, loyaltyPrefsResult, loyaltyLogResult] = await Promise.all([
     locals.supabase
       .from('bookings')
       .select(`
@@ -115,6 +154,19 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
       .eq('customer_id', customerId)
       .or(`status.in.(completed,cancelled,no_show,rejected),and(status.in.(pending,accepted),start_at.lt.${now})`)
       .order('start_at', { ascending: false }),
+
+    admin
+      .from('shop_preferences')
+      .select('loyalty_enabled')
+      .eq('shop_id', custShopId)
+      .single(),
+
+    admin
+      .from('loyalty_points_log')
+      .select('id, change, reason, created_at, bookings ( services ( name ) )')
+      .eq('customer_id', customerId)
+      .order('created_at', { ascending: false })
+      .limit(5),
   ])
 
   if (upcomingResult.error) throw upcomingResult.error
@@ -145,5 +197,19 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
     hasReview: Array.isArray(b.reviews) ? b.reviews.length > 0 : b.reviews !== null,
   }))
 
-  return { upcomingBookings, pastBookings }
+  const loyaltyLog: LoyaltyLogEntry[] = ((loyaltyLogResult.data ?? []) as unknown as RawLoyaltyLogRow[]).map(row => ({
+    id: row.id,
+    change: row.change,
+    reason: row.reason,
+    createdAt: formatShortDate(row.created_at),
+    serviceName: row.bookings?.services?.name ?? null,
+  }))
+
+  return {
+    upcomingBookings,
+    pastBookings,
+    loyaltyEnabled: loyaltyPrefsResult.data?.loyalty_enabled ?? false,
+    loyaltyPoints,
+    loyaltyLog,
+  }
 }

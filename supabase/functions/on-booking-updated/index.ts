@@ -156,6 +156,61 @@ Deno.serve(async (req) => {
             status: "sent",
           });
         }
+
+        // Award loyalty points — isolated so a failure here never affects the response
+        try {
+          const { data: loyaltyPrefs } = await supabase
+            .from("shop_preferences")
+            .select("loyalty_enabled, loyalty_points_per_booking, loyalty_points_per_pence")
+            .eq("shop_id", fullBooking.shop_id)
+            .single();
+
+          if (loyaltyPrefs?.loyalty_enabled) {
+            const { data: serviceData } = await supabase
+              .from("services")
+              .select("price_pence")
+              .eq("id", booking.service_id)
+              .single();
+
+            const pricePence = serviceData?.price_pence ?? 0;
+            let points = 0;
+
+            if (loyaltyPrefs.loyalty_points_per_booking !== null) {
+              points += loyaltyPrefs.loyalty_points_per_booking;
+            }
+            if (
+              loyaltyPrefs.loyalty_points_per_pence !== null &&
+              loyaltyPrefs.loyalty_points_per_pence > 0
+            ) {
+              points += Math.floor(pricePence / loyaltyPrefs.loyalty_points_per_pence);
+            }
+
+            if (points > 0) {
+              await supabase.from("loyalty_points_log").insert({
+                customer_id: fullBooking.customer_id,
+                shop_id: fullBooking.shop_id,
+                booking_id: booking.id,
+                change: points,
+                reason: "booking_completed",
+                note: null,
+              });
+
+              const { data: customerData } = await supabase
+                .from("customers")
+                .select("loyalty_points")
+                .eq("id", fullBooking.customer_id)
+                .single();
+
+              await supabase
+                .from("customers")
+                .update({ loyalty_points: (customerData?.loyalty_points ?? 0) + points })
+                .eq("id", fullBooking.customer_id);
+            }
+          }
+        } catch (loyaltyErr) {
+          console.error("Loyalty points error:", loyaltyErr);
+        }
+
         break;
       }
 

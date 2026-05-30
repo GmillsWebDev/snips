@@ -38,6 +38,11 @@
   const bookSlug = $derived(
     data.upcomingBookings.find(b => b.shopSlug)?.shopSlug ?? 'snips-test'
   )
+
+  function eventLabel(reason: string): string {
+    if (reason === 'booking_completed') return 'Booking completed'
+    return 'Adjustment'
+  }
 </script>
 
 <svelte:head>
@@ -148,6 +153,38 @@
         </button>
       {/if}
     {/if}
+  {/if}
+
+  {#if data.loyaltyEnabled}
+    <div class="points-card">
+      <div class="points-card__header">
+        <h2 class="points-card__title">Your points</h2>
+        <div class="points-balance">
+          <span class="points-balance__number">{data.loyaltyPoints}</span>
+          <span class="points-balance__label">points</span>
+        </div>
+      </div>
+
+      {#if data.loyaltyPoints === 0 && data.loyaltyLog.length === 0}
+        <p class="points-card__empty">Complete a booking to start earning points.</p>
+      {:else if data.loyaltyLog.length > 0}
+        <ul class="points-log" role="list">
+          {#each data.loyaltyLog as entry (entry.id)}
+            <li class="points-log__row">
+              <span class="points-log__date">{entry.createdAt}</span>
+              <span class="points-log__event">{eventLabel(entry.reason)}</span>
+              <span
+                class="points-log__change"
+                class:points-log__change--positive={entry.change > 0}
+                class:points-log__change--negative={entry.change < 0}
+              >
+                {entry.change > 0 ? `+${entry.change}` : `${entry.change}`} pts
+              </span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -371,5 +408,104 @@
       border-color: var(--color-text-subtle);
       color: var(--color-text);
     }
+  }
+
+  /* ── Points card ───────────────────────────────────────────── */
+  .points-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4) var(--space-6);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  .points-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+
+  .points-card__title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .points-balance {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .points-balance__number {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .points-balance__label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  .points-card__empty {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  /* ── Mini points log ───────────────────────────────────────── */
+  .points-log {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-3);
+  }
+
+  .points-log__row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--color-border);
+    font-size: var(--font-size-sm);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
+  .points-log__date {
+    color: var(--color-text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-size: var(--font-size-xs);
+  }
+
+  .points-log__event {
+    color: var(--color-text);
+  }
+
+  .points-log__change {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .points-log__change--positive {
+    color: var(--color-accepted-text);
+  }
+
+  .points-log__change--negative {
+    color: var(--color-rejected-text);
   }
 </style>

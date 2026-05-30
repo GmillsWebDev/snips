@@ -15,6 +15,7 @@ export type RelatedBooking = {
 
 export type BookingDetail = {
   id: string
+  customerId: string
   status: BookingStatus
   date: string
   startTime: string
@@ -132,6 +133,7 @@ function toRelated(b: { id: string; start_at: string; status: string; services: 
 function buildBookingDetail(data: RawBookingData): BookingDetail {
   return {
     id: data.id,
+    customerId: data.customer_id,
     status: data.status as BookingStatus,
     date: formatDate(data.start_at),
     startTime: formatTime(data.start_at),
