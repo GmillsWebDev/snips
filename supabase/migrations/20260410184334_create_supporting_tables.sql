@@ -38,22 +38,6 @@ create table public.notification_log (
 
 create index on public.notification_log (booking_id);
 
--- Discount codes
-create table public.discount_codes (
-  id          uuid primary key default gen_random_uuid(),
-  shop_id     uuid references public.shops(id) on delete cascade not null,
-  code        text not null unique,
-  type        text not null check (type in ('percent','fixed_pence')),
-  value       int not null,
-  max_uses    int,
-  uses_count  int not null default 0,
-  expires_at  timestamptz,
-  is_active   boolean not null default true
-);
-
-create index on public.discount_codes (shop_id);
-create index on public.discount_codes (code);
-
 -- User roles
 create table public.user_roles (
   id       uuid primary key default gen_random_uuid(),

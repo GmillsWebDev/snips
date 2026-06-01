@@ -271,17 +271,3 @@ create policy "Owners can view notification log for their shop"
 create policy "Service role can insert notification logs"
   on public.notification_log for insert
   with check (true);
-
-
--- =====================
--- DISCOUNT CODES
--- =====================
-alter table public.discount_codes enable row level security;
-
-create policy "Anyone can view active discount codes to validate"
-  on public.discount_codes for select
-  using (is_active = true);
-
-create policy "Owners can manage discount codes for their shop"
-  on public.discount_codes for all
-  using (public.is_shop_owner(shop_id));
