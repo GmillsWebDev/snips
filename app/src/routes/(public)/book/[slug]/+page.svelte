@@ -26,9 +26,79 @@
 
   const supabase = createSupabaseBrowserClient()
 
+  type AppliedDiscount = {
+    discountCodeId: string
+    code: string
+    discountAmountPence: number
+    discountLabel: string
+    finalPricePence: number
+  }
+
   let step = $state<Step>('service')
   let booking = $state<BookingState>({ service_id: null, start_at: null, customer: null })
   let skipLoading = $state(false)
+
+  let appliedDiscount = $state<AppliedDiscount | null>(null)
+  let showDiscountInput = $state(false)
+  let discountCodeInput = $state('')
+  let validating = $state(false)
+  let discountError = $state('')
+
+  let _prevServiceId = booking.service_id
+  let _prevStartAt = booking.start_at
+
+  $effect(() => {
+    const sid = booking.service_id
+    const sat = booking.start_at
+    if (sid !== _prevServiceId || sat !== _prevStartAt) {
+      _prevServiceId = sid
+      _prevStartAt = sat
+      appliedDiscount = null
+      showDiscountInput = false
+      discountCodeInput = ''
+      discountError = ''
+    }
+  })
+
+  async function applyDiscount() {
+    const selectedService = services.find((s) => s.id === booking.service_id)
+    if (!selectedService || !discountCodeInput.trim()) return
+
+    validating = true
+    discountError = ''
+
+    try {
+      const resp = await fetch('/api/validate-discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: discountCodeInput.trim(),
+          shopId: shop.id,
+          serviceId: selectedService.id,
+          pricePence: selectedService.price_pence,
+          customerId: booking.customer?.customer_id ?? undefined,
+        }),
+      })
+      const result = await resp.json() as { valid?: boolean; error?: string; discountCodeId?: string; discountAmountPence?: number; discountLabel?: string; finalPricePence?: number }
+      if (!resp.ok || !result.valid) {
+        discountError = result.error ?? 'Invalid discount code.'
+      } else {
+        appliedDiscount = {
+          discountCodeId: result.discountCodeId!,
+          code: discountCodeInput.trim().toUpperCase(),
+          discountAmountPence: result.discountAmountPence!,
+          discountLabel: result.discountLabel!,
+          finalPricePence: result.finalPricePence!,
+        }
+        showDiscountInput = false
+        discountCodeInput = ''
+      }
+    } catch {
+      discountError = 'Failed to validate code. Please try again.'
+    } finally {
+      validating = false
+    }
+  }
 
   // When a logged-in user leaves the datetime step, fetch their customer record
   // and jump straight to confirmation, bypassing the customer details step entirely.
@@ -162,6 +232,57 @@
             } : null}
           />
 
+          <div class="discount-section">
+            {#if appliedDiscount}
+              <div class="discount-applied">
+                <span class="discount-applied__text">
+                  <strong>{appliedDiscount.code}</strong> applied — {appliedDiscount.discountLabel}.
+                  You save £{(appliedDiscount.discountAmountPence / 100).toFixed(2)}.
+                </span>
+                <button
+                  type="button"
+                  class="discount-applied__remove"
+                  onclick={() => { appliedDiscount = null; showDiscountInput = false }}
+                >Remove</button>
+              </div>
+            {:else if showDiscountInput}
+              <div class="discount-input">
+                <div class="discount-input__row">
+                  <input
+                    type="text"
+                    class="discount-input__code"
+                    value={discountCodeInput}
+                    placeholder="Enter code"
+                    disabled={validating}
+                    oninput={(e) => {
+                      const el = e.currentTarget
+                      const pos = el.selectionStart
+                      el.value = el.value.toUpperCase()
+                      discountCodeInput = el.value
+                      el.setSelectionRange(pos, pos)
+                    }}
+                    onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDiscount() } }}
+                  />
+                  <button
+                    type="button"
+                    class="discount-input__apply"
+                    disabled={validating || !discountCodeInput.trim()}
+                    onclick={applyDiscount}
+                  >{validating ? 'Checking…' : 'Apply'}</button>
+                </div>
+                {#if discountError}
+                  <p class="discount-error">{discountError}</p>
+                {/if}
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="discount-toggle"
+                onclick={() => { showDiscountInput = true; discountError = '' }}
+              >Have a discount code?</button>
+            {/if}
+          </div>
+
           <div class="step__actions step__actions--split">
             <Button
               edges="soft"
@@ -182,12 +303,64 @@
           {#if booking.customer && booking.service_id && booking.start_at}
             {@const selectedService = services.find(s => s.id === booking.service_id)}
             {#if selectedService}
+              <div class="discount-section">
+                {#if appliedDiscount}
+                  <div class="discount-applied">
+                    <span class="discount-applied__text">
+                      <strong>{appliedDiscount.code}</strong> applied — {appliedDiscount.discountLabel}.
+                      You save £{(appliedDiscount.discountAmountPence / 100).toFixed(2)}.
+                    </span>
+                    <button
+                      type="button"
+                      class="discount-applied__remove"
+                      onclick={() => { appliedDiscount = null; showDiscountInput = false }}
+                    >Remove</button>
+                  </div>
+                {:else if showDiscountInput}
+                  <div class="discount-input">
+                    <div class="discount-input__row">
+                      <input
+                        type="text"
+                        class="discount-input__code"
+                        value={discountCodeInput}
+                        placeholder="Enter code"
+                        disabled={validating}
+                        oninput={(e) => {
+                          const el = e.currentTarget
+                          const pos = el.selectionStart
+                          el.value = el.value.toUpperCase()
+                          discountCodeInput = el.value
+                          el.setSelectionRange(pos, pos)
+                        }}
+                        onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDiscount() } }}
+                      />
+                      <button
+                        type="button"
+                        class="discount-input__apply"
+                        disabled={validating || !discountCodeInput.trim()}
+                        onclick={applyDiscount}
+                      >{validating ? 'Checking…' : 'Apply'}</button>
+                    </div>
+                    {#if discountError}
+                      <p class="discount-error">{discountError}</p>
+                    {/if}
+                  </div>
+                {:else}
+                  <button
+                    type="button"
+                    class="discount-toggle"
+                    onclick={() => { showDiscountInput = true; discountError = '' }}
+                  >Have a discount code?</button>
+                {/if}
+              </div>
+
               <BookingSummary
                 shop_name={shop.name}
                 service={selectedService}
                 start_at={booking.start_at}
                 timezone={shop.timezone}
                 customer={booking.customer}
+                {appliedDiscount}
                 onback={() => {
                   step = booking.customer?.is_guest ? 'customer' : 'datetime'
                 }}
@@ -258,5 +431,102 @@
   .step__unavailable {
     color: var(--color-text-muted);
     margin-bottom: var(--space-4);
+  }
+
+  /* ── Discount section ─────────────────────────────── */
+
+  .discount-section {
+    margin-top: var(--space-5);
+  }
+
+  .discount-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: var(--transition);
+
+    &:hover { color: var(--color-text); }
+  }
+
+  .discount-input__row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .discount-input__code {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    color: var(--color-text);
+    background: var(--color-bg);
+    transition: var(--transition);
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &:disabled { opacity: 0.6; }
+  }
+
+  .discount-input__apply {
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-primary);
+    color: var(--color-on-primary, #fff);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+
+    &:hover:not(:disabled) { background: var(--color-primary-hover); }
+    &:disabled { opacity: 0.6; cursor: default; }
+  }
+
+  .discount-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+    margin-top: var(--space-2);
+  }
+
+  .discount-applied {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--color-accepted-bg);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .discount-applied__text {
+    color: var(--color-accepted-text);
+  }
+
+  .discount-applied__remove {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &:hover { color: var(--color-text); }
   }
 </style>

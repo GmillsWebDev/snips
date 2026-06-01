@@ -17,6 +17,8 @@ export type Booking = {
   barberName: string
   status: BookingStatus
   pricePence: number
+  finalPricePence: number
+  discountCodeId: string | null
 }
 
 export type Barber = {
@@ -98,6 +100,8 @@ export const load: PageServerLoad = async ({ parent, url }) => {
       start_at,
       end_at,
       status,
+      discount_code_id,
+      discount_amount_pence,
       customers ( first_name, last_name, email, phone ),
       services ( name, price_pence ),
       barbers ( name )
@@ -118,24 +122,31 @@ export const load: PageServerLoad = async ({ parent, url }) => {
 
   type JoinedRow = {
     id: string; start_at: string; end_at: string; status: string
+    discount_code_id: string | null; discount_amount_pence: number | null
     customers: { first_name: string; last_name: string; email: string; phone: string } | null
     services: { name: string; price_pence: number } | null
     barbers: { name: string } | null
   }
-  const bookings: Booking[] = ((data ?? []) as unknown as JoinedRow[]).map(b => ({
-    id: b.id,
-    startAt: b.start_at,
-    endAt: b.end_at,
-    date: formatDate(b.start_at),
-    time: formatTime(b.start_at),
-    customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
-    customerEmail: b.customers?.email ?? '',
-    customerPhone: b.customers?.phone ?? '',
-    serviceName: b.services?.name ?? '',
-    barberName: b.barbers?.name ?? '',
-    status: b.status as BookingStatus,
-    pricePence: b.services?.price_pence ?? 0,
-  }))
+  const bookings: Booking[] = ((data ?? []) as unknown as JoinedRow[]).map(b => {
+    const pricePence = b.services?.price_pence ?? 0
+    const discountAmount = b.discount_amount_pence ?? 0
+    return {
+      id: b.id,
+      startAt: b.start_at,
+      endAt: b.end_at,
+      date: formatDate(b.start_at),
+      time: formatTime(b.start_at),
+      customerName: `${b.customers?.first_name ?? ''} ${b.customers?.last_name ?? ''}`.trim(),
+      customerEmail: b.customers?.email ?? '',
+      customerPhone: b.customers?.phone ?? '',
+      serviceName: b.services?.name ?? '',
+      barberName: b.barbers?.name ?? '',
+      status: b.status as BookingStatus,
+      pricePence,
+      finalPricePence: discountAmount > 0 ? pricePence - discountAmount : pricePence,
+      discountCodeId: b.discount_code_id ?? null,
+    }
+  })
 
   return {
     bookings,

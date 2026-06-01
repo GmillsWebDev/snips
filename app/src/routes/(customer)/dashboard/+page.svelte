@@ -100,7 +100,10 @@
               <span class="booking-card__detail">
                 {booking.service.durationMinutes} min
                 &middot;
-                {formatPrice(booking.service.pricePence)}
+                {formatPrice(booking.finalPricePence)}
+                {#if booking.discountCodeId}
+                  <span class="booking-card__discount-label">Discount applied</span>
+                {/if}
               </span>
               <span class="booking-card__barber">with {booking.barberName}</span>
             </div>
@@ -355,6 +358,12 @@
   .booking-card__detail {
     font-size: var(--font-size-sm);
     color: var(--color-text-muted);
+  }
+
+  .booking-card__discount-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-accepted-text);
+    margin-left: var(--space-1);
   }
 
   .booking-card__barber {

@@ -15,6 +15,8 @@ export type UpcomingBooking = {
     durationMinutes: number
     pricePence: number
   }
+  finalPricePence: number
+  discountCodeId: string | null
   barberName: string
   chairLabel: string | null
   shopSlug: string | null
@@ -132,6 +134,8 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
         start_at,
         status,
         notes,
+        discount_code_id,
+        discount_amount_pence,
         services ( name, duration_minutes, price_pence ),
         barbers ( name ),
         chairs ( label ),
@@ -172,21 +176,36 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
   if (upcomingResult.error) throw upcomingResult.error
   if (pastResult.error) throw pastResult.error
 
-  const upcomingBookings: UpcomingBooking[] = (upcomingResult.data ?? []).map(b => ({
-    id: b.id,
-    date: formatDate(b.start_at),
-    time: formatTime(b.start_at),
-    status: b.status as 'pending' | 'accepted',
-    notes: b.notes ?? null,
-    service: {
-      name: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.name ?? '',
-      durationMinutes: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.duration_minutes ?? 0,
-      pricePence: (b.services as unknown as { name: string; duration_minutes: number; price_pence: number } | null)?.price_pence ?? 0,
-    },
-    barberName: (b.barbers as unknown as { name: string } | null)?.name ?? '',
-    chairLabel: (b.chairs as unknown as { label: string } | null)?.label ?? null,
-    shopSlug: (b.shops as unknown as { slug: string } | null)?.slug ?? null,
-  }))
+  type RawUpcoming = {
+    id: string; start_at: string; status: string; notes: string | null
+    discount_code_id: string | null; discount_amount_pence: number | null
+    services: { name: string; duration_minutes: number; price_pence: number } | null
+    barbers: { name: string } | null
+    chairs: { label: string } | null
+    shops: { slug: string } | null
+  }
+
+  const upcomingBookings: UpcomingBooking[] = ((upcomingResult.data ?? []) as unknown as RawUpcoming[]).map(b => {
+    const pricePence = b.services?.price_pence ?? 0
+    const discountAmount = b.discount_amount_pence ?? 0
+    return {
+      id: b.id,
+      date: formatDate(b.start_at),
+      time: formatTime(b.start_at),
+      status: b.status as 'pending' | 'accepted',
+      notes: b.notes ?? null,
+      service: {
+        name: b.services?.name ?? '',
+        durationMinutes: b.services?.duration_minutes ?? 0,
+        pricePence,
+      },
+      finalPricePence: discountAmount > 0 ? pricePence - discountAmount : pricePence,
+      discountCodeId: b.discount_code_id ?? null,
+      barberName: b.barbers?.name ?? '',
+      chairLabel: b.chairs?.label ?? null,
+      shopSlug: b.shops?.slug ?? null,
+    }
+  })
 
   const pastBookings: PastBooking[] = (pastResult.data ?? []).map(b => ({
     id: b.id,

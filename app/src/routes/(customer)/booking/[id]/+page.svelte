@@ -54,6 +54,20 @@
         <dt>Price</dt>
         <dd>{formatPrice(data.booking.service.pricePence)}</dd>
       </div>
+      {#if data.discountCode}
+        <div class="detail-list__row">
+          <dt>Discount code</dt>
+          <dd>{data.discountCode.code} ({data.discountCode.discountType === 'percentage' ? `${data.discountCode.discountValue}% off` : `£${(data.discountCode.discountValue / 100).toFixed(2)} off`})</dd>
+        </div>
+        <div class="detail-list__row">
+          <dt>Discount</dt>
+          <dd class="detail-list__discount">−{formatPrice(data.discountCode.discountAmountPence)}</dd>
+        </div>
+        <div class="detail-list__row">
+          <dt>Final price</dt>
+          <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.discountCode.discountAmountPence)}</dd>
+        </div>
+      {/if}
       <div class="detail-list__row">
         <dt>Barber</dt>
         <dd>{data.booking.barberName}</dd>
@@ -185,6 +199,15 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+  }
+
+  .detail-list__discount {
+    color: var(--color-rejected-text);
+  }
+
+  .detail-list__final-price {
+    color: var(--color-accepted-text);
+    font-weight: 600;
   }
 
   .cancel-error {

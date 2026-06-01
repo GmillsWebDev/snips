@@ -40,6 +40,13 @@ export type BookingDetail = {
   chairLabel: string
 }
 
+export type DiscountCode = {
+  code: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number
+  discountAmountPence: number
+}
+
 export type NotificationLog = {
   id: string
   type: string
@@ -107,6 +114,8 @@ type RawBookingData = {
   internal_notes: string | null
   cancellation_reason: string | null
   deposit_paid_pence: number | null
+  discount_code_id: string | null
+  discount_amount_pence: number | null
   created_at: string
   updated_at: string
   customers: { first_name: string; last_name: string; email: string; phone: string } | null
@@ -201,6 +210,8 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       internal_notes,
       cancellation_reason,
       deposit_paid_pence,
+      discount_code_id,
+      discount_amount_pence,
       created_at,
       updated_at,
       customers ( first_name, last_name, email, phone ),
@@ -216,7 +227,9 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   const relatedSelect = 'id, start_at, status, services ( name )'
 
-  const [previousResult, upcomingResult, reviewResult, notificationsResult, loyaltyPrefsResult, tiersResult, customerPointsResult] = await Promise.all([
+  const rawData = data as unknown as RawBookingData
+
+  const [previousResult, upcomingResult, reviewResult, notificationsResult, loyaltyPrefsResult, tiersResult, customerPointsResult, discountCodeResult] = await Promise.all([
     admin
       .from('bookings')
       .select(relatedSelect)
@@ -261,6 +274,13 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       .select('loyalty_points')
       .eq('id', data.customer_id)
       .single(),
+    rawData.discount_code_id
+      ? admin
+          .from('discount_codes')
+          .select('code, discount_type, discount_value')
+          .eq('id', rawData.discount_code_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   if (reviewResult.error) error(500, 'Failed to load review')
@@ -279,12 +299,21 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     sentAt: formatDateTime(n.sent_at),
   }))
 
+  const dcRaw = discountCodeResult.data as { code: string; discount_type: string; discount_value: number } | null
+  const discountCode: DiscountCode | null = dcRaw ? {
+    code: dcRaw.code,
+    discountType: dcRaw.discount_type as 'percentage' | 'fixed',
+    discountValue: dcRaw.discount_value,
+    discountAmountPence: rawData.discount_amount_pence ?? 0,
+  } : null
+
   return {
-    booking: buildBookingDetail(data as unknown as RawBookingData),
+    booking: buildBookingDetail(rawData),
     relatedBookings,
     backHref,
     review: buildReview(reviewResult.data),
     notifications,
+    discountCode,
     loyaltyEnabled: loyaltyPrefsResult.data?.loyalty_enabled ?? false,
     rewardTiers: (tiersResult.data ?? []) as RewardTier[],
     customerLoyaltyPoints: customerPointsResult.data?.loyalty_points ?? 0,

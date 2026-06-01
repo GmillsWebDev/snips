@@ -308,6 +308,14 @@
         <dd>{data.booking.service.durationMinutes} min</dd>
         <dt>Price</dt>
         <dd>{formatPrice(data.booking.service.pricePence)}</dd>
+        {#if data.discountCode}
+          <dt>Discount code</dt>
+          <dd>{data.discountCode.code} ({data.discountCode.discountType === 'percentage' ? `${data.discountCode.discountValue}% off` : `£${(data.discountCode.discountValue / 100).toFixed(2)} off`})</dd>
+          <dt>Discount</dt>
+          <dd class="detail-list__discount">−{formatPrice(data.discountCode.discountAmountPence)}</dd>
+          <dt>Final price</dt>
+          <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.discountCode.discountAmountPence)}</dd>
+        {/if}
         {#if data.booking.depositPaidPence > 0}
           <dt>Deposit paid</dt>
           <dd>{formatPrice(data.booking.depositPaidPence)}</dd>
@@ -1143,6 +1151,15 @@
     color: var(--color-text-muted);
     font-family: monospace;
     word-break: break-all;
+  }
+
+  .detail-list__discount {
+    color: var(--color-rejected-text);
+  }
+
+  .detail-list__final-price {
+    color: var(--color-accepted-text);
+    font-weight: 600;
   }
 
 </style>

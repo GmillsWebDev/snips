@@ -61,8 +61,12 @@ export const actions: Actions = {
     const last_name   = form.get('last_name')   as string | null
     const email       = form.get('email')       as string | null
     const phone       = form.get('phone')       as string | null
-    const is_guest    = form.get('is_guest') === 'true'
-    const customer_id = form.get('customer_id') as string | null
+    const is_guest             = form.get('is_guest') === 'true'
+    const customer_id          = form.get('customer_id') as string | null
+    const discount_code_id     = (form.get('discount_code_id') as string | null) || null
+    const discount_amount_pence = discount_code_id
+      ? (parseInt(form.get('discount_amount_pence') as string ?? '0', 10) || 0)
+      : null
 
     if (!service_id || !start_at || !first_name || !last_name || !email || !phone) {
       return fail(400, { error: 'Missing required booking details.' })
@@ -135,11 +139,35 @@ export const actions: Actions = {
         start_at,
         end_at,
         status: 'pending',
+        ...(discount_code_id ? { discount_code_id, discount_amount_pence } : {}),
       })
       .select('id')
       .single()
 
     if (bookingErr || !booking) return fail(500, { error: 'Could not create booking. Please try again.' })
+
+    if (discount_code_id) {
+      try {
+        const { data: codeRow } = await admin
+          .from('discount_codes')
+          .select('times_used')
+          .eq('id', discount_code_id)
+          .single()
+
+        await Promise.all([
+          admin.from('discount_code_uses').insert({
+            discount_code_id,
+            customer_id: resolved_customer_id,
+            booking_id: booking.id,
+          }),
+          admin.from('discount_codes')
+            .update({ times_used: (codeRow?.times_used ?? 0) + 1 })
+            .eq('id', discount_code_id),
+        ])
+      } catch {
+        // Non-fatal — booking is already created
+      }
+    }
 
     if (is_guest) {
       const origin = new URL(request.url).origin
