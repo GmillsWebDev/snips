@@ -11,6 +11,12 @@ export type DiscountCode = {
   discountAmountPence: number
 }
 
+export type LoyaltyTier = {
+  name: string
+  rewardDescription: string
+  discountAmountPence: number
+}
+
 export type BookingDetail = {
   id: string
   status: BookingStatus
@@ -93,6 +99,8 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
       cancellation_reason,
       discount_code_id,
       discount_amount_pence,
+      loyalty_tier_id,
+      loyalty_discount_amount_pence,
       services ( name, duration_minutes, price_pence ),
       barbers ( name ),
       chairs ( label )
@@ -103,7 +111,12 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
   if (bookingError || !data) error(404, 'Booking not found')
   if (data.customer_id !== customerId) error(403, 'Forbidden')
 
-  type RawData = typeof data & { discount_code_id: string | null; discount_amount_pence: number | null }
+  type RawData = typeof data & {
+    discount_code_id: string | null
+    discount_amount_pence: number | null
+    loyalty_tier_id: string | null
+    loyalty_discount_amount_pence: number | null
+  }
   const raw = data as unknown as RawData
 
   let discountCode: DiscountCode | null = null
@@ -124,6 +137,23 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
     }
   }
 
+  let loyaltyTier: LoyaltyTier | null = null
+  if (raw.loyalty_tier_id) {
+    const { data: lt } = await admin
+      .from('loyalty_reward_tiers')
+      .select('name, reward_description')
+      .eq('id', raw.loyalty_tier_id)
+      .maybeSingle()
+
+    if (lt) {
+      loyaltyTier = {
+        name: lt.name as string,
+        rewardDescription: lt.reward_description as string,
+        discountAmountPence: raw.loyalty_discount_amount_pence ?? 0,
+      }
+    }
+  }
+
   const booking: BookingDetail = {
     id: data.id,
     status: data.status as BookingStatus,
@@ -140,7 +170,7 @@ export const load: PageServerLoad = async ({ params, locals, parent }) => {
     chairLabel: (data.chairs as unknown as { label: string } | null)?.label ?? null,
   }
 
-  return { booking, discountCode }
+  return { booking, discountCode, loyaltyTier }
 }
 
 export const actions: Actions = {

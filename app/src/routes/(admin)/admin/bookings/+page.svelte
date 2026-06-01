@@ -174,7 +174,9 @@
               <td class="bookings-table__price">{formatPrice(booking.finalPricePence)}</td>
               <td class="bookings-table__discount">
                 {#if booking.discountCodeId}
-                  <span class="discount-badge">Yes</span>
+                  <span class="discount-badge" title="Discount code applied">Yes</span>
+                {:else if booking.loyaltyTierId && (booking.loyaltyDiscountAmountPence ?? 0) > 0}
+                  <span class="discount-badge" title="Loyalty reward applied">Yes</span>
                 {:else}
                   <span class="discount-none">—</span>
                 {/if}

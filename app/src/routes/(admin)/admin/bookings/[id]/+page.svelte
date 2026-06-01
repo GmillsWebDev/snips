@@ -20,12 +20,19 @@
   let redeemSubmitting = $state(false)
   let redeemResult = $state<{ tierName: string; newBalance: number } | null>(null)
 
+  let loyaltyPointsRefunded = $state(data.loyaltyPointsRefunded ?? false)
+  let loyaltyRefundSuccess = $state(false)
+
   $effect(() => {
     notesText = data.booking.internalNotes ?? ''
   })
 
   $effect(() => {
     loyaltyPoints = data.customerLoyaltyPoints
+  })
+
+  $effect(() => {
+    loyaltyPointsRefunded = data.loyaltyPointsRefunded ?? false
   })
 
   function formatPrice(pence: number): string {
@@ -320,7 +327,56 @@
           <dt>Deposit paid</dt>
           <dd>{formatPrice(data.booking.depositPaidPence)}</dd>
         {/if}
+        {#if data.loyaltyTier}
+          <dt>Loyalty reward</dt>
+          <dd>{data.loyaltyTier.name} — {data.loyaltyTier.rewardDescription}</dd>
+          {#if data.loyaltyDiscountAmountPence > 0}
+            <dt>Discount</dt>
+            <dd class="detail-list__loyalty-discount">−{formatPrice(data.loyaltyDiscountAmountPence)}</dd>
+            <dt>Final price</dt>
+            <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.loyaltyDiscountAmountPence)}</dd>
+          {/if}
+          <dt>Points redeemed</dt>
+          <dd>{data.loyaltyPointsRedeemed} pts</dd>
+          {#if data.booking.status === 'cancelled'}
+            <dt>Points refunded</dt>
+            <dd class={loyaltyPointsRefunded ? 'detail-list__final-price' : 'detail-list__muted'}>
+              {loyaltyPointsRefunded ? 'Yes' : 'No'}
+            </dd>
+          {/if}
+        {/if}
       </dl>
+
+      {#if data.loyaltyTier && data.booking.status === 'cancelled' && (data.loyaltyPointsRedeemed ?? 0) > 0}
+        <div class="loyalty-refund">
+          {#if loyaltyRefundSuccess}
+            <p class="loyalty-refund__success">Points refunded successfully.</p>
+          {/if}
+          {#if !loyaltyPointsRefunded}
+            {#if form?.refundError}
+              <p class="loyalty-refund__error">{form.refundError}</p>
+            {/if}
+            <form
+              method="post"
+              action="?/refundLoyaltyPoints"
+              use:enhance={() => {
+                return async ({ result, update }) => {
+                  if (result.type === 'success') {
+                    loyaltyPointsRefunded = true
+                    loyaltyRefundSuccess = true
+                    setTimeout(() => { loyaltyRefundSuccess = false }, 5000)
+                  }
+                  await update()
+                }
+              }}
+            >
+              <button type="submit" class="loyalty-refund__btn">
+                Refund {data.loyaltyPointsRedeemed} points to customer
+              </button>
+            </form>
+          {/if}
+        </div>
+      {/if}
     </section>
 
     <!-- ── Meta ───────────────────────────────────────── -->
@@ -1160,6 +1216,55 @@
   .detail-list__final-price {
     color: var(--color-accepted-text);
     font-weight: 600;
+  }
+
+  .detail-list__loyalty-discount {
+    color: #d97706;
+    font-weight: 500;
+  }
+
+  .detail-list__muted {
+    color: var(--color-text-muted);
+  }
+
+  /* ── Loyalty refund ──────────────────────────────── */
+
+  .loyalty-refund {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .loyalty-refund__btn {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: #92400e;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid #fcd34d;
+    border-radius: var(--radius-sm);
+    background: #fef3c7;
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:hover {
+      background: #fde68a;
+      border-color: #d97706;
+    }
+  }
+
+  .loyalty-refund__success {
+    font-size: var(--font-size-sm);
+    color: var(--color-accepted-text);
+  }
+
+  .loyalty-refund__error {
+    font-size: var(--font-size-sm);
+    color: var(--color-rejected-text);
   }
 
 </style>

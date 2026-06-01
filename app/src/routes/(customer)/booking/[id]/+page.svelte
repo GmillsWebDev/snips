@@ -68,6 +68,22 @@
           <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.discountCode.discountAmountPence)}</dd>
         </div>
       {/if}
+      {#if data.loyaltyTier}
+        <div class="detail-list__row">
+          <dt>Loyalty reward</dt>
+          <dd>{data.loyaltyTier.name}{data.loyaltyTier.discountAmountPence === 0 ? ` — ${data.loyaltyTier.rewardDescription}` : ''}</dd>
+        </div>
+        {#if data.loyaltyTier.discountAmountPence > 0}
+          <div class="detail-list__row">
+            <dt>Discount</dt>
+            <dd class="detail-list__loyalty-discount">−{formatPrice(data.loyaltyTier.discountAmountPence)}</dd>
+          </div>
+          <div class="detail-list__row">
+            <dt>Final price</dt>
+            <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.loyaltyTier.discountAmountPence)}</dd>
+          </div>
+        {/if}
+      {/if}
       <div class="detail-list__row">
         <dt>Barber</dt>
         <dd>{data.booking.barberName}</dd>
@@ -203,6 +219,11 @@
 
   .detail-list__discount {
     color: var(--color-rejected-text);
+  }
+
+  .detail-list__loyalty-discount {
+    color: #d97706;
+    font-weight: 500;
   }
 
   .detail-list__final-price {

@@ -103,6 +103,8 @@
                 {formatPrice(booking.finalPricePence)}
                 {#if booking.discountCodeId}
                   <span class="booking-card__discount-label">Discount applied</span>
+                {:else if booking.loyaltyTierId && (booking.loyaltyDiscountAmountPence ?? 0) > 0}
+                  <span class="booking-card__discount-label">Loyalty reward applied</span>
                 {/if}
               </span>
               <span class="booking-card__barber">with {booking.barberName}</span>

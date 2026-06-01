@@ -155,7 +155,7 @@
   .summary__section {
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4) var(--space-4);
   }
 
   .summary__heading {

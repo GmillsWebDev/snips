@@ -19,6 +19,8 @@ export type Booking = {
   pricePence: number
   finalPricePence: number
   discountCodeId: string | null
+  loyaltyTierId: string | null
+  loyaltyDiscountAmountPence: number | null
 }
 
 export type Barber = {
@@ -102,6 +104,8 @@ export const load: PageServerLoad = async ({ parent, url }) => {
       status,
       discount_code_id,
       discount_amount_pence,
+      loyalty_tier_id,
+      loyalty_discount_amount_pence,
       customers ( first_name, last_name, email, phone ),
       services ( name, price_pence ),
       barbers ( name )
@@ -123,6 +127,7 @@ export const load: PageServerLoad = async ({ parent, url }) => {
   type JoinedRow = {
     id: string; start_at: string; end_at: string; status: string
     discount_code_id: string | null; discount_amount_pence: number | null
+    loyalty_tier_id: string | null; loyalty_discount_amount_pence: number | null
     customers: { first_name: string; last_name: string; email: string; phone: string } | null
     services: { name: string; price_pence: number } | null
     barbers: { name: string } | null
@@ -130,6 +135,12 @@ export const load: PageServerLoad = async ({ parent, url }) => {
   const bookings: Booking[] = ((data ?? []) as unknown as JoinedRow[]).map(b => {
     const pricePence = b.services?.price_pence ?? 0
     const discountAmount = b.discount_amount_pence ?? 0
+    const loyaltyDiscount = b.loyalty_discount_amount_pence ?? 0
+    const finalPricePence = discountAmount > 0
+      ? pricePence - discountAmount
+      : loyaltyDiscount > 0
+        ? pricePence - loyaltyDiscount
+        : pricePence
     return {
       id: b.id,
       startAt: b.start_at,
@@ -143,8 +154,10 @@ export const load: PageServerLoad = async ({ parent, url }) => {
       barberName: b.barbers?.name ?? '',
       status: b.status as BookingStatus,
       pricePence,
-      finalPricePence: discountAmount > 0 ? pricePence - discountAmount : pricePence,
+      finalPricePence,
       discountCodeId: b.discount_code_id ?? null,
+      loyaltyTierId: b.loyalty_tier_id ?? null,
+      loyaltyDiscountAmountPence: b.loyalty_discount_amount_pence ?? null,
     }
   })
 

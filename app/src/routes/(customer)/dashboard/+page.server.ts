@@ -17,6 +17,8 @@ export type UpcomingBooking = {
   }
   finalPricePence: number
   discountCodeId: string | null
+  loyaltyTierId: string | null
+  loyaltyDiscountAmountPence: number | null
   barberName: string
   chairLabel: string | null
   shopSlug: string | null
@@ -136,6 +138,8 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
         notes,
         discount_code_id,
         discount_amount_pence,
+        loyalty_tier_id,
+        loyalty_discount_amount_pence,
         services ( name, duration_minutes, price_pence ),
         barbers ( name ),
         chairs ( label ),
@@ -179,6 +183,7 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
   type RawUpcoming = {
     id: string; start_at: string; status: string; notes: string | null
     discount_code_id: string | null; discount_amount_pence: number | null
+    loyalty_tier_id: string | null; loyalty_discount_amount_pence: number | null
     services: { name: string; duration_minutes: number; price_pence: number } | null
     barbers: { name: string } | null
     chairs: { label: string } | null
@@ -188,6 +193,12 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
   const upcomingBookings: UpcomingBooking[] = ((upcomingResult.data ?? []) as unknown as RawUpcoming[]).map(b => {
     const pricePence = b.services?.price_pence ?? 0
     const discountAmount = b.discount_amount_pence ?? 0
+    const loyaltyDiscount = b.loyalty_discount_amount_pence ?? 0
+    const finalPricePence = discountAmount > 0
+      ? pricePence - discountAmount
+      : loyaltyDiscount > 0
+        ? pricePence - loyaltyDiscount
+        : pricePence
     return {
       id: b.id,
       date: formatDate(b.start_at),
@@ -199,8 +210,10 @@ export const load: PageServerLoad = async ({ locals, parent }) => {
         durationMinutes: b.services?.duration_minutes ?? 0,
         pricePence,
       },
-      finalPricePence: discountAmount > 0 ? pricePence - discountAmount : pricePence,
+      finalPricePence,
       discountCodeId: b.discount_code_id ?? null,
+      loyaltyTierId: b.loyalty_tier_id ?? null,
+      loyaltyDiscountAmountPence: b.loyalty_discount_amount_pence ?? null,
       barberName: b.barbers?.name ?? '',
       chairLabel: b.chairs?.label ?? null,
       shopSlug: b.shops?.slug ?? null,

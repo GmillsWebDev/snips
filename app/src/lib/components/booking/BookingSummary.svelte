@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from 'svelte'
   import { page } from '$app/stores'
   import { enhance } from '$app/forms'
   import Button from '$lib/components/ui/Button.svelte'
@@ -19,6 +20,14 @@
     finalPricePence: number
   }
 
+  type AppliedLoyaltyReward = {
+    tierId: string
+    tierName: string
+    pointsRequired: number
+    rewardDescription: string
+    rewardValuePence: number | null
+  }
+
   let {
     shop_name,
     service,
@@ -26,6 +35,8 @@
     timezone,
     customer,
     appliedDiscount = null,
+    appliedLoyaltyReward = null,
+    offers = null,
     onback,
   }: {
     shop_name: string
@@ -34,6 +45,8 @@
     timezone: string
     customer: CustomerDetails
     appliedDiscount?: AppliedDiscount | null
+    appliedLoyaltyReward?: AppliedLoyaltyReward | null
+    offers?: Snippet | null
     onback: () => void
   } = $props()
 
@@ -89,6 +102,9 @@
           {#if appliedDiscount}
             <span class="summary__original-price">{formatPrice(service.price_pence)}</span>
             {formatPrice(appliedDiscount.finalPricePence)}
+          {:else if appliedLoyaltyReward?.rewardValuePence}
+            <span class="summary__original-price">{formatPrice(service.price_pence)}</span>
+            {formatPrice(Math.max(0, service.price_pence - appliedLoyaltyReward.rewardValuePence))}
           {:else}
             {formatPrice(service.price_pence)}
           {/if}
@@ -98,6 +114,17 @@
         <div class="summary__row">
           <dt>Discount</dt>
           <dd class="summary__discount">−{formatPrice(appliedDiscount.discountAmountPence)} ({appliedDiscount.discountLabel})</dd>
+        </div>
+      {/if}
+      {#if appliedLoyaltyReward}
+        <div class="summary__row">
+          <dt>Loyalty reward</dt>
+          <dd class="summary__loyalty">
+            {appliedLoyaltyReward.tierName}
+            {#if appliedLoyaltyReward.rewardValuePence}
+              <span class="summary__loyalty-saving">−{formatPrice(appliedLoyaltyReward.rewardValuePence)}</span>
+            {/if}
+          </dd>
         </div>
       {/if}
       <div class="summary__row">
@@ -154,6 +181,14 @@
   {#if appliedDiscount}
     <input type="hidden" name="discount_code_id" value={appliedDiscount.discountCodeId} />
     <input type="hidden" name="discount_amount_pence" value={appliedDiscount.discountAmountPence} />
+  {/if}
+  {#if appliedLoyaltyReward}
+    <input type="hidden" name="loyalty_tier_id" value={appliedLoyaltyReward.tierId} />
+    <input type="hidden" name="loyalty_points_required" value={appliedLoyaltyReward.pointsRequired} />
+  {/if}
+
+  {#if offers}
+    {@render offers()}
   {/if}
 
   <div class="confirm-actions">
@@ -238,5 +273,17 @@
 
   .summary__discount {
     color: var(--color-accepted-text);
+  }
+
+  .summary__loyalty {
+    color: #d97706;
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    justify-content: flex-end;
+  }
+
+  .summary__loyalty-saving {
+    font-weight: 600;
   }
 </style>

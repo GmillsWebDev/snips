@@ -4,10 +4,20 @@ import { createSupabaseAdminClient } from '$lib/server/supabase'
 import { resolveCustomer } from '$lib/server/resolveCustomer'
 import { resolveChair } from '$lib/server/resolveChair'
 
+export type RewardTier = {
+  id: string
+  name: string
+  points_required: number
+  reward_description: string
+  reward_value_pence: number | null
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
+  const { user } = await locals.safeGetSession()
+
   const { data: shopRaw, error: shopError } = await locals.supabase
     .from('shops')
-    .select('id, name, plan_type, timezone, shop_preferences(booking_window_days)')
+    .select('id, name, plan_type, timezone')
     .eq('slug', params.slug)
     .eq('is_active', true)
     .single()
@@ -17,38 +27,64 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     throw shopError
   }
 
-  const shop = {
-    id: shopRaw.id,
-    name: shopRaw.name,
-    plan_type: shopRaw.plan_type,
-    timezone: shopRaw.timezone,
-    booking_window_days: shopRaw.shop_preferences?.[0]?.booking_window_days ?? 30,
-  }
+  const admin = createSupabaseAdminClient()
 
-  const [servicesResult, barberResult] = await Promise.all([
+  const [servicesResult, barberResult, prefsResult, tiersResult, customerResult] = await Promise.all([
     locals.supabase
       .from('services')
       .select('id, name, description, duration_minutes, price_pence')
-      .eq('shop_id', shop.id)
+      .eq('shop_id', shopRaw.id)
       .eq('is_active', true)
       .eq('is_deleted', false)
       .order('display_order'),
     locals.supabase
       .from('barbers')
       .select('id')
-      .eq('shop_id', shop.id)
+      .eq('shop_id', shopRaw.id)
       .eq('is_active', true)
       .limit(1)
       .single(),
+    admin
+      .from('shop_preferences')
+      .select('booking_window_days, loyalty_enabled')
+      .eq('shop_id', shopRaw.id)
+      .single(),
+    admin
+      .from('loyalty_reward_tiers')
+      .select('id, name, points_required, reward_description, reward_value_pence')
+      .eq('shop_id', shopRaw.id)
+      .eq('is_active', true)
+      .order('points_required', { ascending: true }),
+    user
+      ? admin
+          .from('customers')
+          .select('loyalty_points')
+          .eq('shop_id', shopRaw.id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   if (servicesResult.error) throw servicesResult.error
   if (barberResult.error && barberResult.error.code !== 'PGRST116') throw barberResult.error
 
+  const loyaltyEnabled = prefsResult.data?.loyalty_enabled ?? false
+
+  const shop = {
+    id: shopRaw.id,
+    name: shopRaw.name,
+    plan_type: shopRaw.plan_type,
+    timezone: shopRaw.timezone,
+    booking_window_days: prefsResult.data?.booking_window_days ?? 30,
+  }
+
   return {
     shop,
     services: servicesResult.data,
     barber_id: barberResult.data?.id ?? null,
+    loyaltyEnabled,
+    rewardTiers: (tiersResult.data ?? []) as RewardTier[],
+    customerLoyaltyPoints: customerResult.data?.loyalty_points ?? null,
   }
 }
 
@@ -66,6 +102,10 @@ export const actions: Actions = {
     const discount_code_id     = (form.get('discount_code_id') as string | null) || null
     const discount_amount_pence = discount_code_id
       ? (parseInt(form.get('discount_amount_pence') as string ?? '0', 10) || 0)
+      : null
+    const loyalty_tier_id       = (form.get('loyalty_tier_id') as string | null) || null
+    const loyalty_points_required = loyalty_tier_id
+      ? (parseInt(form.get('loyalty_points_required') as string ?? '0', 10) || 0)
       : null
 
     if (!service_id || !start_at || !first_name || !last_name || !email || !phone) {
@@ -166,6 +206,58 @@ export const actions: Actions = {
         ])
       } catch {
         // Non-fatal — booking is already created
+      }
+    }
+
+    if (loyalty_tier_id && loyalty_points_required !== null) {
+      try {
+        const { data: tier } = await admin
+          .from('loyalty_reward_tiers')
+          .select('id, name, points_required, reward_value_pence')
+          .eq('id', loyalty_tier_id)
+          .eq('shop_id', shop.id)
+          .eq('is_active', true)
+          .maybeSingle()
+
+        if (!tier) throw new Error('Loyalty reward tier not found or inactive.')
+
+        const { data: customerRow } = await admin
+          .from('customers')
+          .select('loyalty_points')
+          .eq('id', resolved_customer_id)
+          .single()
+
+        const currentPoints = customerRow?.loyalty_points ?? 0
+        if (currentPoints < tier.points_required) {
+          throw new Error(`You no longer have enough points for this reward (you have ${currentPoints}, need ${tier.points_required}).`)
+        }
+
+        await admin
+          .from('bookings')
+          .update({
+            loyalty_tier_id: tier.id,
+            loyalty_points_redeemed: tier.points_required,
+            loyalty_discount_amount_pence: tier.reward_value_pence ?? 0,
+          })
+          .eq('id', booking.id)
+
+        await Promise.all([
+          admin.from('loyalty_points_log').insert({
+            customer_id: resolved_customer_id,
+            shop_id: shop.id,
+            booking_id: booking.id,
+            change: -tier.points_required,
+            reason: 'redeemed',
+            note: tier.name,
+          }),
+          admin.from('customers')
+            .update({ loyalty_points: currentPoints - tier.points_required })
+            .eq('id', resolved_customer_id),
+        ])
+      } catch (e) {
+        await admin.from('bookings').delete().eq('id', booking.id)
+        const msg = e instanceof Error ? e.message : 'Failed to redeem loyalty reward. Please try again.'
+        return fail(400, { error: msg })
       }
     }
 
