@@ -3,6 +3,7 @@ import type { PageServerLoad, Actions } from './$types'
 import { createSupabaseAdminClient } from '$lib/server/supabase'
 import { resolveCustomer } from '$lib/server/resolveCustomer'
 import { resolveChair } from '$lib/server/resolveChair'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 export type RewardTier = {
   id: string
@@ -90,6 +91,99 @@ async function redeemLoyaltyReward(
   ])
 }
 
+type ParsedBookingForm = {
+  service_id: string
+  start_at: string
+  first_name: string
+  last_name: string
+  email: string
+  phone: string
+  is_guest: boolean
+  customer_id: string | null
+  discount_code_id: string | null
+  discount_amount_pence: number | null
+  loyalty_tier_id: string | null
+  loyalty_points_required: number | null
+}
+
+function parseBookingForm(form: FormData): ParsedBookingForm | null {
+  const service_id = form.get('service_id') as string | null
+  const start_at   = form.get('start_at')   as string | null
+  const first_name = form.get('first_name') as string | null
+  const last_name  = form.get('last_name')  as string | null
+  const email      = form.get('email')      as string | null
+  const phone      = form.get('phone')      as string | null
+
+  if (!service_id || !start_at || !first_name || !last_name || !email || !phone) return null
+
+  const is_guest         = form.get('is_guest') === 'true'
+  const customer_id      = (form.get('customer_id')      as string | null) || null
+  const discount_code_id = (form.get('discount_code_id') as string | null) || null
+  const loyalty_tier_id  = (form.get('loyalty_tier_id')  as string | null) || null
+
+  return {
+    service_id, start_at, first_name, last_name, email, phone,
+    is_guest, customer_id, discount_code_id,
+    discount_amount_pence: discount_code_id
+      ? (parseInt(form.get('discount_amount_pence') as string ?? '0', 10) || 0)
+      : null,
+    loyalty_tier_id,
+    loyalty_points_required: loyalty_tier_id
+      ? (parseInt(form.get('loyalty_points_required') as string ?? '0', 10) || 0)
+      : null,
+  }
+}
+
+type BookingContext = {
+  shop: { id: string; timezone: string }
+  end_at: string
+  barber: { id: string }
+  chair_id: string
+}
+
+async function resolveBookingContext(
+  supabase: SupabaseClient,
+  slug: string,
+  serviceId: string,
+  startAt: string,
+): Promise<BookingContext> {
+  const { data: shop, error: shopErr } = await supabase
+    .from('shops')
+    .select('id, timezone')
+    .eq('slug', slug)
+    .eq('is_active', true)
+    .single()
+  if (shopErr || !shop) throw new Error('Shop not found.')
+
+  const { data: service, error: serviceErr } = await supabase
+    .from('services')
+    .select('id, duration_minutes')
+    .eq('id', serviceId)
+    .eq('shop_id', shop.id)
+    .eq('is_active', true)
+    .eq('is_deleted', false)
+    .single()
+  if (serviceErr || !service) throw new Error('Service not found.')
+
+  const end_at = new Date(
+    new Date(startAt).getTime() + service.duration_minutes * 60_000
+  ).toISOString()
+
+  const { data: barber, error: barberErr } = await supabase
+    .from('barbers')
+    .select('id')
+    .eq('shop_id', shop.id)
+    .eq('is_active', true)
+    .limit(1)
+    .single()
+  if (barberErr || !barber) throw new Error('No barber available.')
+
+  const chair_id = await resolveChair(supabase, barber.id, shop.id)
+  if (!chair_id) throw new Error('No chair available.')
+
+  return { shop, end_at, barber, chair_id }
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
   const { user } = await locals.safeGetSession()
 
@@ -169,63 +263,27 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 export const actions: Actions = {
   confirm: async ({ request, params, locals }) => {
     const form = await request.formData()
-    const service_id  = form.get('service_id')  as string | null
-    const start_at    = form.get('start_at')    as string | null
-    const first_name  = form.get('first_name')  as string | null
-    const last_name   = form.get('last_name')   as string | null
-    const email       = form.get('email')       as string | null
-    const phone       = form.get('phone')       as string | null
-    const is_guest             = form.get('is_guest') === 'true'
-    const customer_id          = form.get('customer_id') as string | null
-    const discount_code_id     = (form.get('discount_code_id') as string | null) || null
-    const discount_amount_pence = discount_code_id
-      ? (parseInt(form.get('discount_amount_pence') as string ?? '0', 10) || 0)
-      : null
-    const loyalty_tier_id       = (form.get('loyalty_tier_id') as string | null) || null
-    const loyalty_points_required = loyalty_tier_id
-      ? (parseInt(form.get('loyalty_points_required') as string ?? '0', 10) || 0)
-      : null
+    const parsed = parseBookingForm(form)
+    if (!parsed) return fail(400, { error: 'Missing required booking details.' })
 
-    if (!service_id || !start_at || !first_name || !last_name || !email || !phone) {
-      return fail(400, { error: 'Missing required booking details.' })
-    }
+    const {
+      service_id, start_at, first_name, last_name, email, phone,
+      is_guest, customer_id, discount_code_id, discount_amount_pence,
+      loyalty_tier_id, loyalty_points_required,
+    } = parsed
 
     const supabase = locals.supabase
     const admin = createSupabaseAdminClient()
 
-    const { data: shop, error: shopErr } = await supabase
-      .from('shops')
-      .select('id, timezone')
-      .eq('slug', params.slug)
-      .eq('is_active', true)
-      .single()
-    if (shopErr || !shop) return fail(400, { error: 'Shop not found.' })
+    let ctx: BookingContext
+    try {
+      ctx = await resolveBookingContext(supabase, params.slug, service_id, start_at)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Booking setup failed.'
+      return fail(400, { error: msg })
+    }
 
-    const { data: service, error: serviceErr } = await supabase
-      .from('services')
-      .select('id, duration_minutes')
-      .eq('id', service_id)
-      .eq('shop_id', shop.id)
-      .eq('is_active', true)
-      .eq('is_deleted', false)
-      .single()
-    if (serviceErr || !service) return fail(400, { error: 'Service not found.' })
-
-    const end_at = new Date(
-      new Date(start_at).getTime() + service.duration_minutes * 60_000
-    ).toISOString()
-
-    const { data: barber, error: barberErr } = await supabase
-      .from('barbers')
-      .select('id')
-      .eq('shop_id', shop.id)
-      .eq('is_active', true)
-      .limit(1)
-      .single()
-    if (barberErr || !barber) return fail(400, { error: 'No barber available.' })
-
-    const chair_id = await resolveChair(supabase, barber.id, shop.id)
-    if (!chair_id) return fail(400, { error: 'No chair available.' })
+    const { shop, end_at, barber, chair_id } = ctx
 
     let resolved_customer_id: string
 
