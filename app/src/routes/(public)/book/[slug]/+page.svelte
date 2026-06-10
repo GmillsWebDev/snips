@@ -336,13 +336,6 @@
   <main class="container">
     <div class="booking-page__card">
       <h1>Book an appointment</h1>
-      <!-- DEBUG — remove after -->
-  <pre style="font-size:11px;background:#111;color:#0f0;padding:8px;margin-bottom:8px">
-  loyaltyEnabled: {data.loyaltyEnabled}
-  rewardTiers: {data.rewardTiers?.length ?? 'undefined'}
-  customerLoyaltyPoints: {data.customerLoyaltyPoints}
-  showLoyalty: {showLoyalty}
-  </pre>
       <p class="booking-page__subtitle">at {shop.name}</p>
 
       {#if step === 'service'}
