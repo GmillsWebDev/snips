@@ -12,6 +12,84 @@ export type RewardTier = {
   reward_value_pence: number | null
 }
 
+type AdminClient = ReturnType<typeof createSupabaseAdminClient>
+
+async function trackDiscountUse(
+  admin: AdminClient,
+  discountCodeId: string,
+  customerId: string,
+  bookingId: string,
+): Promise<void> {
+  const { data: codeRow } = await admin
+    .from('discount_codes')
+    .select('times_used')
+    .eq('id', discountCodeId)
+    .single()
+
+  await Promise.all([
+    admin.from('discount_code_uses').insert({
+      discount_code_id: discountCodeId,
+      customer_id: customerId,
+      booking_id: bookingId,
+    }),
+    admin.from('discount_codes')
+      .update({ times_used: (codeRow?.times_used ?? 0) + 1 })
+      .eq('id', discountCodeId),
+  ])
+}
+
+async function redeemLoyaltyReward(
+  admin: AdminClient,
+  bookingId: string,
+  loyaltyTierId: string,
+  customerId: string,
+  shopId: string,
+): Promise<void> {
+  const { data: tier } = await admin
+    .from('loyalty_reward_tiers')
+    .select('id, name, points_required, reward_value_pence')
+    .eq('id', loyaltyTierId)
+    .eq('shop_id', shopId)
+    .eq('is_active', true)
+    .maybeSingle()
+
+  if (!tier) throw new Error('Loyalty reward tier not found or inactive.')
+
+  const { data: customerRow } = await admin
+    .from('customers')
+    .select('loyalty_points')
+    .eq('id', customerId)
+    .single()
+
+  const currentPoints = customerRow?.loyalty_points ?? 0
+  if (currentPoints < tier.points_required) {
+    throw new Error(`You no longer have enough points for this reward (you have ${currentPoints}, need ${tier.points_required}).`)
+  }
+
+  await admin
+    .from('bookings')
+    .update({
+      loyalty_tier_id: tier.id,
+      loyalty_points_redeemed: tier.points_required,
+      loyalty_discount_amount_pence: tier.reward_value_pence ?? 0,
+    })
+    .eq('id', bookingId)
+
+  await Promise.all([
+    admin.from('loyalty_points_log').insert({
+      customer_id: customerId,
+      shop_id: shopId,
+      booking_id: bookingId,
+      change: -tier.points_required,
+      reason: 'redeemed',
+      note: tier.name,
+    }),
+    admin.from('customers')
+      .update({ loyalty_points: currentPoints - tier.points_required })
+      .eq('id', customerId),
+  ])
+}
+
 export const load: PageServerLoad = async ({ params, locals }) => {
   const { user } = await locals.safeGetSession()
 
@@ -188,22 +266,7 @@ export const actions: Actions = {
 
     if (discount_code_id) {
       try {
-        const { data: codeRow } = await admin
-          .from('discount_codes')
-          .select('times_used')
-          .eq('id', discount_code_id)
-          .single()
-
-        await Promise.all([
-          admin.from('discount_code_uses').insert({
-            discount_code_id,
-            customer_id: resolved_customer_id,
-            booking_id: booking.id,
-          }),
-          admin.from('discount_codes')
-            .update({ times_used: (codeRow?.times_used ?? 0) + 1 })
-            .eq('id', discount_code_id),
-        ])
+        await trackDiscountUse(admin, discount_code_id, resolved_customer_id, booking.id)
       } catch {
         // Non-fatal — booking is already created
       }
@@ -211,49 +274,7 @@ export const actions: Actions = {
 
     if (loyalty_tier_id && loyalty_points_required !== null) {
       try {
-        const { data: tier } = await admin
-          .from('loyalty_reward_tiers')
-          .select('id, name, points_required, reward_value_pence')
-          .eq('id', loyalty_tier_id)
-          .eq('shop_id', shop.id)
-          .eq('is_active', true)
-          .maybeSingle()
-
-        if (!tier) throw new Error('Loyalty reward tier not found or inactive.')
-
-        const { data: customerRow } = await admin
-          .from('customers')
-          .select('loyalty_points')
-          .eq('id', resolved_customer_id)
-          .single()
-
-        const currentPoints = customerRow?.loyalty_points ?? 0
-        if (currentPoints < tier.points_required) {
-          throw new Error(`You no longer have enough points for this reward (you have ${currentPoints}, need ${tier.points_required}).`)
-        }
-
-        await admin
-          .from('bookings')
-          .update({
-            loyalty_tier_id: tier.id,
-            loyalty_points_redeemed: tier.points_required,
-            loyalty_discount_amount_pence: tier.reward_value_pence ?? 0,
-          })
-          .eq('id', booking.id)
-
-        await Promise.all([
-          admin.from('loyalty_points_log').insert({
-            customer_id: resolved_customer_id,
-            shop_id: shop.id,
-            booking_id: booking.id,
-            change: -tier.points_required,
-            reason: 'redeemed',
-            note: tier.name,
-          }),
-          admin.from('customers')
-            .update({ loyalty_points: currentPoints - tier.points_required })
-            .eq('id', resolved_customer_id),
-        ])
+        await redeemLoyaltyReward(admin, booking.id, loyalty_tier_id, resolved_customer_id, shop.id)
       } catch (e) {
         await admin.from('bookings').delete().eq('id', booking.id)
         const msg = e instanceof Error ? e.message : 'Failed to redeem loyalty reward. Please try again.'
