@@ -5,6 +5,10 @@
 	let { links = [
 		{ href: '/admin/dashboard', label: 'Dashboard', exact: true },
 		{ href: '/admin/bookings', label: 'Bookings', exact: false },
+		{ href: '/admin/customers', label: 'Customers', exact: false },
+		{ href: '/admin/discount-codes', label: 'Discount Codes', exact: false },
+		{ href: '/admin/calendar', label: 'Calendar', exact: false },
+		{ href: '/admin/reviews', label: 'Reviews', exact: false },
 		{ href: '/admin/services', label: 'Services', exact: false },
 		{ href: '/admin/schedule', label: 'Schedule', exact: false },
 		{ href: '/admin/blocked-slots', label: 'Blocked Slots', exact: false },

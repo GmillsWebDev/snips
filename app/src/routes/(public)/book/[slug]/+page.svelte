@@ -19,6 +19,22 @@
     customer: CustomerDetailsType | null
   }
 
+  type AppliedDiscount = {
+    discountCodeId: string
+    code: string
+    discountAmountPence: number
+    discountLabel: string
+    finalPricePence: number
+  }
+
+  type AppliedLoyaltyReward = {
+    tierId: string
+    tierName: string
+    pointsRequired: number
+    rewardDescription: string
+    rewardValuePence: number | null
+  }
+
   const DRAFT_KEY = 'snips_booking_draft'
 
   let { data }: { data: PageData } = $props()
@@ -30,8 +46,111 @@
   let booking = $state<BookingState>({ service_id: null, start_at: null, customer: null })
   let skipLoading = $state(false)
 
-  // When a logged-in user leaves the datetime step, fetch their customer record
-  // and jump straight to confirmation, bypassing the customer details step entirely.
+  // Which offer type is active: none / discount / loyalty
+  let activeOfferType = $state<'none' | 'discount' | 'loyalty'>('none')
+
+  // Discount state
+  let appliedDiscount = $state<AppliedDiscount | null>(null)
+  let showDiscountInput = $state(false)
+  let discountCodeInput = $state('')
+  let validating = $state(false)
+  let discountError = $state('')
+
+  // Loyalty state
+  let appliedLoyaltyReward = $state<AppliedLoyaltyReward | null>(null)
+  let showLoyaltySection = $state(false)
+
+  const showLoyalty = $derived(
+    data.loyaltyEnabled === true &&
+    (data.rewardTiers?.length ?? 0) > 0 &&
+    data.customerLoyaltyPoints !== null
+  )
+
+  // Clear all offer state when service or time changes
+  let _prevServiceId = booking.service_id
+  let _prevStartAt = booking.start_at
+
+  $effect(() => {
+    const sid = booking.service_id
+    const sat = booking.start_at
+    if (sid !== _prevServiceId || sat !== _prevStartAt) {
+      _prevServiceId = sid
+      _prevStartAt = sat
+      appliedDiscount = null
+      appliedLoyaltyReward = null
+      activeOfferType = 'none'
+      showDiscountInput = false
+      showLoyaltySection = false
+      discountCodeInput = ''
+      discountError = ''
+    }
+  })
+
+  function openDiscount() {
+    activeOfferType = 'discount'
+    showDiscountInput = true
+    discountError = ''
+  }
+
+  function removeDiscount() {
+    activeOfferType = 'none'
+    appliedDiscount = null
+    showDiscountInput = false
+    discountCodeInput = ''
+    discountError = ''
+  }
+
+  function openLoyalty() {
+    activeOfferType = 'loyalty'
+    showLoyaltySection = true
+  }
+
+  function removeLoyalty() {
+    activeOfferType = 'none'
+    appliedLoyaltyReward = null
+    showLoyaltySection = false
+  }
+
+  async function applyDiscount() {
+    const selectedService = services.find((s) => s.id === booking.service_id)
+    if (!selectedService || !discountCodeInput.trim()) return
+
+    validating = true
+    discountError = ''
+
+    try {
+      const resp = await fetch('/api/validate-discount', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: discountCodeInput.trim(),
+          shopId: shop.id,
+          serviceId: selectedService.id,
+          pricePence: selectedService.price_pence,
+          customerId: booking.customer?.customer_id ?? undefined,
+        }),
+      })
+      const result = await resp.json() as { valid?: boolean; error?: string; discountCodeId?: string; discountAmountPence?: number; discountLabel?: string; finalPricePence?: number }
+      if (!resp.ok || !result.valid) {
+        discountError = result.error ?? 'Invalid discount code.'
+      } else {
+        appliedDiscount = {
+          discountCodeId: result.discountCodeId!,
+          code: discountCodeInput.trim().toUpperCase(),
+          discountAmountPence: result.discountAmountPence!,
+          discountLabel: result.discountLabel!,
+          finalPricePence: result.finalPricePence!,
+        }
+        showDiscountInput = false
+        discountCodeInput = ''
+      }
+    } catch {
+      discountError = 'Failed to validate code. Please try again.'
+    } finally {
+      validating = false
+    }
+  }
+
   async function advanceFromDatetime() {
     if (!data.user) {
       step = 'customer'
@@ -62,8 +181,6 @@
     }
   }
 
-  // If the user returns from /login with a saved draft, restore their progress
-  // and skip the customer step (they're now logged in).
   onMount(async () => {
     if (!data.user) return
     try {
@@ -89,6 +206,117 @@
     goto(`/login?redirectTo=/book/${$page.params.slug}`)
   }
 </script>
+
+{#snippet offerSection()}
+  <div class="offers-section">
+
+    <!-- ── Discount offer ──────────────────────────────── -->
+    {#if activeOfferType === 'loyalty'}
+      <p class="offers-blocked">
+        <button type="button" class="offers-blocked__link" onclick={removeLoyalty}>Remove loyalty reward</button>
+        to use a discount code instead.
+      </p>
+    {:else if appliedDiscount}
+      <div class="offer-applied offer-applied--discount">
+        <span class="offer-applied__text">
+          <strong>{appliedDiscount.code}</strong> applied — {appliedDiscount.discountLabel}.
+          You save £{(appliedDiscount.discountAmountPence / 100).toFixed(2)}.
+        </span>
+        <button type="button" class="offer-applied__remove" onclick={removeDiscount}>Remove</button>
+      </div>
+    {:else if showDiscountInput}
+      <div class="discount-input">
+        <div class="discount-input__row">
+          <input
+            type="text"
+            class="discount-input__code"
+            value={discountCodeInput}
+            placeholder="Enter code"
+            disabled={validating}
+            oninput={(e) => {
+              const el = e.currentTarget
+              const pos = el.selectionStart
+              el.value = el.value.toUpperCase()
+              discountCodeInput = el.value
+              el.setSelectionRange(pos, pos)
+            }}
+            onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); applyDiscount() } }}
+          />
+          <button
+            type="button"
+            class="discount-input__apply"
+            disabled={validating || !discountCodeInput.trim()}
+            onclick={applyDiscount}
+          >{validating ? 'Checking…' : 'Apply'}</button>
+        </div>
+        {#if discountError}
+          <p class="discount-error">{discountError}</p>
+        {/if}
+      </div>
+    {:else}
+      <button type="button" class="offer-toggle" onclick={openDiscount}>Have a discount code?</button>
+    {/if}
+
+    <!-- ── Loyalty offer ───────────────────────────────── -->
+    {#if showLoyalty}
+      {#if activeOfferType === 'discount'}
+        <p class="offers-blocked">
+          <button type="button" class="offers-blocked__link" onclick={removeDiscount}>Remove discount code</button>
+          to redeem loyalty points instead.
+        </p>
+      {:else if appliedLoyaltyReward}
+        <div class="offer-applied offer-applied--loyalty">
+          <span class="offer-applied__text">
+            Loyalty reward: <strong>{appliedLoyaltyReward.tierName}</strong> — {appliedLoyaltyReward.pointsRequired} pts deducted on confirmation.
+          </span>
+          <button type="button" class="offer-applied__remove" onclick={removeLoyalty}>Remove</button>
+        </div>
+      {:else if showLoyaltySection}
+        <div class="loyalty-section">
+          <p class="loyalty-balance">
+            You have <strong>{data.customerLoyaltyPoints}</strong> points
+          </p>
+          <div class="loyalty-tiers">
+            {#each (data.rewardTiers ?? []) as tier (tier.id)}
+              {@const canAfford = (data.customerLoyaltyPoints ?? 0) >= tier.points_required}
+              <button
+                type="button"
+                class="loyalty-tier"
+                class:loyalty-tier--unaffordable={!canAfford}
+                disabled={!canAfford}
+                onclick={() => {
+                  appliedLoyaltyReward = {
+                    tierId: tier.id,
+                    tierName: tier.name,
+                    pointsRequired: tier.points_required,
+                    rewardDescription: tier.reward_description,
+                    rewardValuePence: tier.reward_value_pence ?? null,
+                  }
+                  showLoyaltySection = false
+                }}
+              >
+                <span class="loyalty-tier__info">
+                  <span class="loyalty-tier__name">{tier.name}</span>
+                  <span class="loyalty-tier__desc">{tier.reward_description}</span>
+                </span>
+                <span class="loyalty-tier__cost">
+                  {#if canAfford}
+                    {tier.points_required} pts
+                  {:else}
+                    Need {tier.points_required - (data.customerLoyaltyPoints ?? 0)} more pts
+                  {/if}
+                </span>
+              </button>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <button type="button" class="offer-toggle" onclick={openLoyalty}>Redeem loyalty points?</button>
+      {/if}
+    {/if}
+
+  </div>
+{/snippet}
 
 <svelte:head>
   <title>Book an appointment — {shop.name}</title>
@@ -162,6 +390,8 @@
             } : null}
           />
 
+          {@render offerSection()}
+
           <div class="step__actions step__actions--split">
             <Button
               edges="soft"
@@ -188,6 +418,9 @@
                 start_at={booking.start_at}
                 timezone={shop.timezone}
                 customer={booking.customer}
+                {appliedDiscount}
+                {appliedLoyaltyReward}
+                offers={offerSection}
                 onback={() => {
                   step = booking.customer?.is_guest ? 'customer' : 'datetime'
                 }}
@@ -258,5 +491,210 @@
   .step__unavailable {
     color: var(--color-text-muted);
     margin-bottom: var(--space-4);
+  }
+
+  /* ── Offers section ───────────────────────────────── */
+
+  .offers-section {
+    margin-top: var(--space-5);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .offer-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: var(--transition);
+    text-align: left;
+
+    &:hover { color: var(--color-text); }
+  }
+
+  /* Applied offer row (green for discount, amber for loyalty) */
+
+  .offer-applied {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .offer-applied--discount {
+    background: var(--color-accepted-bg);
+
+    .offer-applied__text { color: var(--color-accepted-text); }
+  }
+
+  .offer-applied--loyalty {
+    background: #fef3c7;
+
+    .offer-applied__text { color: #92400e; }
+  }
+
+  .offer-applied__remove {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    white-space: nowrap;
+    flex-shrink: 0;
+
+    &:hover { color: var(--color-text); }
+  }
+
+  /* Blocked offer note */
+
+  .offers-blocked {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .offers-blocked__link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+
+    &:hover { color: var(--color-text); }
+  }
+
+  /* ── Discount code input ──────────────────────────── */
+
+  .discount-input__row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .discount-input__code {
+    flex: 1;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: monospace;
+    letter-spacing: 0.05em;
+    color: var(--color-text);
+    background: var(--color-bg);
+    transition: var(--transition);
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &:disabled { opacity: 0.6; }
+  }
+
+  .discount-input__apply {
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-primary);
+    color: var(--color-on-primary, #fff);
+    border: none;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: var(--transition);
+
+    &:hover:not(:disabled) { background: var(--color-primary-hover); }
+    &:disabled { opacity: 0.6; cursor: default; }
+  }
+
+  .discount-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+    margin-top: var(--space-2);
+  }
+
+  /* ── Loyalty section ──────────────────────────────── */
+
+  .loyalty-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .loyalty-balance {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  .loyalty-tiers {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .loyalty-tier {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    text-align: left;
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:hover:not(:disabled) {
+      border-color: #d97706;
+      background: #fef3c7;
+    }
+  }
+
+  .loyalty-tier--unaffordable {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  .loyalty-tier__info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .loyalty-tier__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .loyalty-tier__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .loyalty-tier__cost {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: #d97706;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .loyalty-tier--unaffordable .loyalty-tier__cost {
+    color: var(--color-text-muted);
+    font-weight: 400;
   }
 </style>

@@ -15,6 +15,7 @@ export type RelatedBooking = {
 
 export type BookingDetail = {
   id: string
+  customerId: string
   status: BookingStatus
   date: string
   startTime: string
@@ -39,12 +40,27 @@ export type BookingDetail = {
   chairLabel: string
 }
 
+export type DiscountCode = {
+  code: string
+  discountType: 'percentage' | 'fixed'
+  discountValue: number
+  discountAmountPence: number
+}
+
 export type NotificationLog = {
   id: string
   type: string
   channel: string
   status: string
   sentAt: string
+}
+
+export type RewardTier = {
+  id: string
+  name: string
+  points_required: number
+  reward_description: string
+  reward_value_pence: number | null
 }
 
 const TIMEZONE = 'Europe/London'
@@ -98,6 +114,12 @@ type RawBookingData = {
   internal_notes: string | null
   cancellation_reason: string | null
   deposit_paid_pence: number | null
+  discount_code_id: string | null
+  discount_amount_pence: number | null
+  loyalty_tier_id: string | null
+  loyalty_points_redeemed: number | null
+  loyalty_points_refunded: boolean
+  loyalty_discount_amount_pence: number | null
   created_at: string
   updated_at: string
   customers: { first_name: string; last_name: string; email: string; phone: string } | null
@@ -132,6 +154,7 @@ function toRelated(b: { id: string; start_at: string; status: string; services: 
 function buildBookingDetail(data: RawBookingData): BookingDetail {
   return {
     id: data.id,
+    customerId: data.customer_id,
     status: data.status as BookingStatus,
     date: formatDate(data.start_at),
     startTime: formatTime(data.start_at),
@@ -191,6 +214,12 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       internal_notes,
       cancellation_reason,
       deposit_paid_pence,
+      discount_code_id,
+      discount_amount_pence,
+      loyalty_tier_id,
+      loyalty_points_redeemed,
+      loyalty_points_refunded,
+      loyalty_discount_amount_pence,
       created_at,
       updated_at,
       customers ( first_name, last_name, email, phone ),
@@ -206,7 +235,9 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
 
   const relatedSelect = 'id, start_at, status, services ( name )'
 
-  const [previousResult, upcomingResult, reviewResult, notificationsResult] = await Promise.all([
+  const rawData = data as unknown as RawBookingData
+
+  const [previousResult, upcomingResult, reviewResult, notificationsResult, loyaltyPrefsResult, tiersResult, customerPointsResult, discountCodeResult, loyaltyTierResult] = await Promise.all([
     admin
       .from('bookings')
       .select(relatedSelect)
@@ -235,6 +266,36 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
       .select('id, type, channel, status, sent_at')
       .eq('booking_id', params.id)
       .order('sent_at', { ascending: true }),
+    admin
+      .from('shop_preferences')
+      .select('loyalty_enabled')
+      .eq('shop_id', shopId)
+      .single(),
+    admin
+      .from('loyalty_reward_tiers')
+      .select('id, name, points_required, reward_description, reward_value_pence')
+      .eq('shop_id', shopId)
+      .eq('is_active', true)
+      .order('points_required', { ascending: true }),
+    admin
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', data.customer_id)
+      .single(),
+    rawData.discount_code_id
+      ? admin
+          .from('discount_codes')
+          .select('code, discount_type, discount_value')
+          .eq('id', rawData.discount_code_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    rawData.loyalty_tier_id
+      ? admin
+          .from('loyalty_reward_tiers')
+          .select('name, reward_description')
+          .eq('id', rawData.loyalty_tier_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ])
 
   if (reviewResult.error) error(500, 'Failed to load review')
@@ -253,12 +314,31 @@ export const load: PageServerLoad = async ({ parent, params, request }) => {
     sentAt: formatDateTime(n.sent_at),
   }))
 
+  const dcRaw = discountCodeResult.data as { code: string; discount_type: string; discount_value: number } | null
+  const discountCode: DiscountCode | null = dcRaw ? {
+    code: dcRaw.code,
+    discountType: dcRaw.discount_type as 'percentage' | 'fixed',
+    discountValue: dcRaw.discount_value,
+    discountAmountPence: rawData.discount_amount_pence ?? 0,
+  } : null
+
+  const ltRaw = loyaltyTierResult.data as { name: string; reward_description: string } | null
+  const loyaltyTier = ltRaw ? { name: ltRaw.name, rewardDescription: ltRaw.reward_description } : null
+
   return {
-    booking: buildBookingDetail(data as unknown as RawBookingData),
+    booking: buildBookingDetail(rawData),
     relatedBookings,
     backHref,
     review: buildReview(reviewResult.data),
     notifications,
+    discountCode,
+    loyaltyEnabled: loyaltyPrefsResult.data?.loyalty_enabled ?? false,
+    rewardTiers: (tiersResult.data ?? []) as RewardTier[],
+    customerLoyaltyPoints: customerPointsResult.data?.loyalty_points ?? 0,
+    loyaltyTier,
+    loyaltyPointsRedeemed: rawData.loyalty_points_redeemed ?? 0,
+    loyaltyPointsRefunded: rawData.loyalty_points_refunded ?? false,
+    loyaltyDiscountAmountPence: rawData.loyalty_discount_amount_pence ?? 0,
   }
 }
 
@@ -290,6 +370,131 @@ export const actions: Actions = {
     if (updateErr) return fail(500, { notesError: 'Failed to save notes. Please try again.' })
 
     return { notesSaved: true }
+  },
+
+  redeemPoints: async ({ params, request, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(403, { redeemError: 'Not authenticated' })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail(403, { redeemError: 'Not authorized' })
+
+    const formData = await request.formData()
+    const tierId = String(formData.get('tierId') ?? '').trim()
+    const customerId = String(formData.get('customerId') ?? '').trim()
+    if (!tierId || !customerId) return fail(400, { redeemError: 'Missing required fields.' })
+
+    const admin = createSupabaseAdminClient()
+    const shopId = role.shop_id
+
+    const { data: tier, error: tierErr } = await admin
+      .from('loyalty_reward_tiers')
+      .select('name, points_required')
+      .eq('id', tierId)
+      .eq('shop_id', shopId)
+      .eq('is_active', true)
+      .single()
+
+    if (tierErr || !tier) return fail(400, { redeemError: 'Reward tier not found or inactive.' })
+
+    const { data: customer, error: customerErr } = await admin
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', customerId)
+      .eq('shop_id', shopId)
+      .single()
+
+    if (customerErr || !customer) return fail(400, { redeemError: 'Customer not found.' })
+
+    if ((customer.loyalty_points ?? 0) < tier.points_required) {
+      return fail(400, { redeemError: 'Customer does not have enough points.' })
+    }
+
+    const newBalance = (customer.loyalty_points ?? 0) - tier.points_required
+
+    const { error: logErr } = await admin
+      .from('loyalty_points_log')
+      .insert({
+        customer_id: customerId,
+        shop_id: shopId,
+        booking_id: params.id,
+        change: -tier.points_required,
+        reason: 'redeemed',
+        note: tier.name,
+      })
+
+    if (logErr) return fail(500, { redeemError: 'Failed to record redemption.' })
+
+    const { error: updateErr } = await admin
+      .from('customers')
+      .update({ loyalty_points: newBalance })
+      .eq('id', customerId)
+      .eq('shop_id', shopId)
+
+    if (updateErr) return fail(500, { redeemError: 'Failed to update balance.' })
+
+    return { redeemSuccess: true, newBalance, tierName: tier.name }
+  },
+
+  refundLoyaltyPoints: async ({ params, locals }) => {
+    const { user } = await locals.safeGetSession()
+    if (!user) return fail(403, { refundError: 'Not authenticated' })
+
+    const role = await getRole(locals.supabase, user.id)
+    if (!role) return fail(403, { refundError: 'Not authorized' })
+
+    const admin = createSupabaseAdminClient()
+
+    const { data: booking, error: bookingErr } = await admin
+      .from('bookings')
+      .select('id, shop_id, customer_id, status, loyalty_points_redeemed, loyalty_points_refunded')
+      .eq('id', params.id)
+      .eq('shop_id', role.shop_id)
+      .single()
+
+    if (bookingErr || !booking) return fail(404, { refundError: 'Booking not found.' })
+    if (booking.status !== 'cancelled') return fail(400, { refundError: 'Points can only be refunded for cancelled bookings.' })
+    if (!booking.loyalty_points_redeemed || booking.loyalty_points_redeemed <= 0) {
+      return fail(400, { refundError: 'No loyalty points to refund.' })
+    }
+    if (booking.loyalty_points_refunded) return fail(400, { refundError: 'Points have already been refunded.' })
+
+    const { data: customer, error: customerErr } = await admin
+      .from('customers')
+      .select('loyalty_points')
+      .eq('id', booking.customer_id)
+      .single()
+
+    if (customerErr || !customer) return fail(500, { refundError: 'Failed to fetch customer.' })
+
+    const { error: logErr } = await admin
+      .from('loyalty_points_log')
+      .insert({
+        customer_id: booking.customer_id,
+        shop_id: booking.shop_id,
+        booking_id: booking.id,
+        change: booking.loyalty_points_redeemed,
+        reason: 'manual_adjustment',
+        note: 'Points refunded — booking cancelled',
+      })
+
+    if (logErr) return fail(500, { refundError: 'Failed to log refund.' })
+
+    const { error: customerUpdateErr } = await admin
+      .from('customers')
+      .update({ loyalty_points: (customer.loyalty_points ?? 0) + booking.loyalty_points_redeemed })
+      .eq('id', booking.customer_id)
+
+    if (customerUpdateErr) return fail(500, { refundError: 'Failed to update customer balance.' })
+
+    const { error: bookingUpdateErr } = await admin
+      .from('bookings')
+      .update({ loyalty_points_refunded: true })
+      .eq('id', booking.id)
+
+    if (bookingUpdateErr) return fail(500, { refundError: 'Failed to mark booking as refunded.' })
+
+    return { refundSuccess: true }
   },
 }
 

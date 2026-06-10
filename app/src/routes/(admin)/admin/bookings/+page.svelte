@@ -135,6 +135,7 @@
             <th>Barber</th>
             <th>Status</th>
             <th class="bookings-table__price-col">Price</th>
+            <th>Discount</th>
             <th></th>
           </tr>
         </thead>
@@ -170,7 +171,16 @@
               <td>{booking.serviceName}</td>
               <td>{booking.barberName}</td>
               <td><Badge status={booking.status} /></td>
-              <td class="bookings-table__price">{formatPrice(booking.pricePence)}</td>
+              <td class="bookings-table__price">{formatPrice(booking.finalPricePence)}</td>
+              <td class="bookings-table__discount">
+                {#if booking.discountCodeId}
+                  <span class="discount-badge" title="Discount code applied">Yes</span>
+                {:else if booking.loyaltyTierId && (booking.loyaltyDiscountAmountPence ?? 0) > 0}
+                  <span class="discount-badge" title="Loyalty reward applied">Yes</span>
+                {:else}
+                  <span class="discount-none">—</span>
+                {/if}
+              </td>
               <td class="bookings-table__action">
                 <a href="/admin/bookings/{booking.id}" class="view-btn">View</a>
               </td>
@@ -469,6 +479,25 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
     font-weight: 500;
+  }
+
+  .bookings-table__discount {
+    white-space: nowrap;
+  }
+
+  .discount-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px var(--space-2);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    background: var(--color-accepted-bg);
+    color: var(--color-accepted-text);
+  }
+
+  .discount-none {
+    color: var(--color-text-subtle);
   }
 
   .bookings-table__action {

@@ -28,6 +28,14 @@
   let bypassWarning = $state(false)
   let brandingFormEl: HTMLFormElement | null = null
 
+  let loyaltyEnabled = $state(data.preferences.loyalty_enabled)
+  let loyaltySubmitting = $state(false)
+  let perBookingValue = $state(data.preferences.loyalty_points_per_booking ?? 0)
+  let perPenceValue = $state(data.preferences.loyalty_points_per_pence ?? 0)
+  let showStackWarning = $derived(loyaltyEnabled && perBookingValue > 0 && perPenceValue > 0)
+  let addTierSubmitting = $state(false)
+  let tierSubmitting = $state<Record<string, boolean>>({})
+
   let ratioPrimary   = $derived(getContrastRatio(pickerPrimary, pickerOnPrimary))
   let ratioSecondary = $derived(getContrastRatio(pickerSecondary, pickerOnSecondary))
   let contrastPrimary   = $derived(getContrastRating(ratioPrimary))
@@ -54,6 +62,12 @@
     hexOnPrimary      = data.branding.color_on_primary.slice(1)
     pickerOnSecondary = data.branding.color_on_secondary
     hexOnSecondary    = data.branding.color_on_secondary.slice(1)
+  })
+
+  $effect(() => {
+    loyaltyEnabled = data.preferences.loyalty_enabled
+    perBookingValue = data.preferences.loyalty_points_per_booking ?? 0
+    perPenceValue = data.preferences.loyalty_points_per_pence ?? 0
   })
 </script>
 
@@ -182,6 +196,273 @@
         </Button>
       </div>
     </form>
+  </section>
+
+  <!-- ── Loyalty Points ───────────────────────────────── -->
+  <section class="settings-section">
+    <h2 class="settings-section__title">Loyalty Points</h2>
+    <p class="settings-section__subdesc">Reward customers with points when bookings are completed.</p>
+
+    <form
+      method="POST"
+      action="?/updateLoyalty"
+      use:enhance={() => {
+        loyaltySubmitting = true
+        return async ({ update }) => {
+          loyaltySubmitting = false
+          await update()
+        }
+      }}
+    >
+      {#if loyaltyEnabled}
+        <input type="hidden" name="loyaltyEnabled" value="on" />
+      {/if}
+
+      <div class="setting-row">
+        <div class="setting-row__info">
+          <span class="setting-row__label">Enable loyalty scheme</span>
+          {#if !loyaltyEnabled}
+            <span class="setting-row__desc">
+              Loyalty points are disabled. Enable the scheme to configure earning rules
+              and show points to customers.
+            </span>
+          {/if}
+        </div>
+        <button
+          type="button"
+          class="toggle"
+          class:toggle--on={loyaltyEnabled}
+          onclick={() => { loyaltyEnabled = !loyaltyEnabled }}
+          aria-pressed={loyaltyEnabled}
+          aria-label="Enable loyalty scheme"
+        >
+          <span class="toggle__thumb"></span>
+        </button>
+      </div>
+
+      <hr class="divider" />
+
+      <div class="setting-row" class:setting-row--muted={!loyaltyEnabled}>
+        <div class="setting-row__info">
+          <span class="setting-row__label">Points per completed booking</span>
+          <span class="setting-row__desc">
+            A flat number of points awarded for every completed booking. Leave blank to disable.
+          </span>
+          {#if form?.loyaltyErrors?.pointsPerBooking}
+            <p class="field-error">{form.loyaltyErrors.pointsPerBooking}</p>
+          {/if}
+        </div>
+        <input
+          name="pointsPerBooking"
+          type="number"
+          class="number-input number-input--wide"
+          placeholder="e.g. 5"
+          min="0"
+          step="1"
+          value={form?.loyaltyValues?.pointsPerBooking ?? (data.preferences.loyalty_points_per_booking ?? '')}
+          oninput={(e) => { perBookingValue = (e.currentTarget as HTMLInputElement).valueAsNumber || 0 }}
+          disabled={!loyaltyEnabled}
+        />
+      </div>
+
+      <hr class="divider" />
+
+      <div class="setting-row" class:setting-row--muted={!loyaltyEnabled}>
+        <div class="setting-row__info">
+          <span class="setting-row__label">Points per £___ spent</span>
+          <span class="setting-row__desc">
+            Award 1 point for every X pence spent. Enter 100 for 1 point per £1,
+            or 500 for 1 point per £5. Leave blank to disable.
+          </span>
+          {#if form?.loyaltyErrors?.pointsPerPence}
+            <p class="field-error">{form.loyaltyErrors.pointsPerPence}</p>
+          {/if}
+        </div>
+        <input
+          name="pointsPerPence"
+          type="number"
+          class="number-input number-input--wide"
+          placeholder="e.g. 100"
+          min="0"
+          step="1"
+          value={form?.loyaltyValues?.pointsPerPence ?? (data.preferences.loyalty_points_per_pence ?? '')}
+          oninput={(e) => { perPenceValue = (e.currentTarget as HTMLInputElement).valueAsNumber || 0 }}
+          disabled={!loyaltyEnabled}
+        />
+      </div>
+
+      {#if showStackWarning}
+        <div class="loyalty-stack-warning">
+          Both earning methods are active — customers will earn flat points per booking
+          <strong>and</strong> spend-based points on the same visit.
+        </div>
+      {/if}
+
+      {#if form?.loyaltyErrors?.form}
+        <p class="form-error">{form.loyaltyErrors.form}</p>
+      {/if}
+
+      <div class="settings-section__footer">
+        <Button type="submit" edges="soft" disabled={loyaltySubmitting} loading={loyaltySubmitting}>
+          {loyaltySubmitting ? 'Saving…' : 'Save loyalty settings'}
+        </Button>
+      </div>
+    </form>
+
+    {#if loyaltyEnabled}
+      <div class="tiers-section">
+        <hr class="divider" />
+        <h3 class="tiers-section__title">Reward Tiers</h3>
+        <p class="tiers-section__desc">Define what customers can redeem their points for.</p>
+
+        {#if data.tiers.length === 0}
+          <p class="tiers-empty">No reward tiers yet. Add one below.</p>
+        {:else}
+          <ul class="tier-list">
+            {#each data.tiers as tier (tier.id)}
+              <li class="tier-row">
+                <div class="tier-row__body">
+                  <div class="tier-row__header">
+                    <span class="tier-row__name">{tier.name}</span>
+                    <span class="tier-row__pts">{tier.points_required} pts</span>
+                  </div>
+                  <span class="tier-row__desc">{tier.reward_description}</span>
+                  <span class="tier-row__value">
+                    {tier.reward_value_pence != null ? `£${(tier.reward_value_pence / 100).toFixed(2)}` : '—'}
+                  </span>
+                </div>
+                <div class="tier-row__actions">
+                  <span class="tier-badge" class:tier-badge--active={tier.is_active}>
+                    {tier.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  <form method="POST" action="?/toggleTier" use:enhance={() => {
+                    tierSubmitting[tier.id] = true
+                    return async ({ update }) => {
+                      tierSubmitting[tier.id] = false
+                      await update()
+                    }
+                  }}>
+                    <input type="hidden" name="tierId" value={tier.id} />
+                    <button type="submit" class="tier-action-btn" disabled={tierSubmitting[tier.id]}>
+                      {tier.is_active ? 'Deactivate' : 'Activate'}
+                    </button>
+                  </form>
+                  <form method="POST" action="?/deleteTier" use:enhance={() => {
+                    tierSubmitting[`del_${tier.id}`] = true
+                    return async ({ update }) => {
+                      tierSubmitting[`del_${tier.id}`] = false
+                      await update()
+                    }
+                  }}>
+                    <input type="hidden" name="tierId" value={tier.id} />
+                    <button type="submit" class="tier-action-btn tier-action-btn--danger" disabled={tierSubmitting[`del_${tier.id}`]}>
+                      Delete
+                    </button>
+                  </form>
+                </div>
+                {#if form?.deleteError && form?.deletedTierId === tier.id}
+                  <p class="tier-row__error">{form.deleteError}</p>
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        {/if}
+
+        <div class="add-tier">
+          <h4 class="add-tier__title">Add a Tier</h4>
+          <form method="POST" action="?/addTier" use:enhance={() => {
+            addTierSubmitting = true
+            return async ({ update }) => {
+              addTierSubmitting = false
+              await update()
+            }
+          }}>
+            <div class="add-tier-fields">
+              <div class="field-group">
+                <label class="field-label" for="tierName">Name</label>
+                <input
+                  id="tierName"
+                  name="tierName"
+                  type="text"
+                  class="field-input"
+                  class:field-input--error={form?.tierErrors?.name}
+                  placeholder="e.g. £5 Off"
+                  value={form?.tierValues?.name ?? ''}
+                  maxlength="50"
+                  disabled={addTierSubmitting}
+                />
+                {#if form?.tierErrors?.name}
+                  <p class="field-error">{form.tierErrors.name}</p>
+                {/if}
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="tierPointsRequired">Points required</label>
+                <input
+                  id="tierPointsRequired"
+                  name="tierPointsRequired"
+                  type="number"
+                  class="field-input"
+                  class:field-input--error={form?.tierErrors?.pointsRequired}
+                  placeholder="e.g. 200"
+                  value={form?.tierValues?.pointsRequired ?? ''}
+                  min="1"
+                  step="1"
+                  disabled={addTierSubmitting}
+                />
+                {#if form?.tierErrors?.pointsRequired}
+                  <p class="field-error">{form.tierErrors.pointsRequired}</p>
+                {/if}
+              </div>
+              <div class="field-group field-group--full">
+                <label class="field-label" for="tierRewardDescription">Reward description</label>
+                <input
+                  id="tierRewardDescription"
+                  name="tierRewardDescription"
+                  type="text"
+                  class="field-input"
+                  class:field-input--error={form?.tierErrors?.rewardDescription}
+                  placeholder="e.g. £5 off your next service"
+                  value={form?.tierValues?.rewardDescription ?? ''}
+                  maxlength="200"
+                  disabled={addTierSubmitting}
+                />
+                {#if form?.tierErrors?.rewardDescription}
+                  <p class="field-error">{form.tierErrors.rewardDescription}</p>
+                {/if}
+              </div>
+              <div class="field-group">
+                <label class="field-label" for="tierRewardValuePence">£ value (optional)</label>
+                <input
+                  id="tierRewardValuePence"
+                  name="tierRewardValuePence"
+                  type="number"
+                  class="field-input"
+                  class:field-input--error={form?.tierErrors?.rewardValuePence}
+                  placeholder="e.g. 500 for £5.00"
+                  value={form?.tierValues?.rewardValuePence ?? ''}
+                  min="1"
+                  step="1"
+                  disabled={addTierSubmitting}
+                />
+                {#if form?.tierErrors?.rewardValuePence}
+                  <p class="field-error">{form.tierErrors.rewardValuePence}</p>
+                {/if}
+              </div>
+            </div>
+
+            {#if form?.tierErrors?.form}
+              <p class="form-error">{form.tierErrors.form}</p>
+            {/if}
+
+            <div class="add-tier__footer">
+              <Button type="submit" size="sm" edges="soft" disabled={addTierSubmitting} loading={addTierSubmitting}>
+                {addTierSubmitting ? 'Adding…' : 'Add tier'}
+              </Button>
+            </div>
+          </form>
+        </div>
+      </div>
+    {/if}
   </section>
 
   <!-- ── Section B: Display Settings ─────────────────── -->
@@ -458,6 +739,22 @@
     white-space: nowrap;
   }
 
+  /* ── Section subdesc ──────────────────────────── */
+
+  .settings-section__subdesc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-2);
+    line-height: 1.4;
+  }
+
+  /* ── Muted row (disabled loyalty inputs) ───────── */
+
+  .setting-row--muted {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
   /* ── Number input ──────────────────────────────── */
 
   .number-input {
@@ -479,6 +776,15 @@
 
     &--error {
       border-color: var(--color-rejected-text);
+    }
+
+    &--wide {
+      width: 8rem;
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
   }
 
@@ -549,6 +855,18 @@
     background: var(--color-bg);
     opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  /* ── Loyalty stack warning ─────────────────────── */
+
+  .loyalty-stack-warning {
+    margin-top: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-pending-bg);
+    color: var(--color-pending-text);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-xs);
+    line-height: 1.5;
   }
 
   /* ── Errors ────────────────────────────────────── */
@@ -697,6 +1015,231 @@
 
     &:hover {
       color: var(--color-text);
+    }
+  }
+
+  /* ── Reward tiers subsection ────────────────────── */
+
+  .tiers-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tiers-section__title {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+    margin: var(--space-4) 0 var(--space-1);
+  }
+
+  .tiers-section__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+  }
+
+  .tiers-empty {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-4);
+  }
+
+  .tier-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--space-2);
+    border-top: 1px solid var(--color-border);
+  }
+
+  .tier-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-3) 0;
+    border-bottom: 1px solid var(--color-border);
+    flex-wrap: wrap;
+  }
+
+  .tier-row__body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .tier-row__header {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .tier-row__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .tier-row__pts {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .tier-row__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .tier-row__value {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .tier-row__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+
+  .tier-row__error {
+    width: 100%;
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+  }
+
+  .tier-badge {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    padding: 1px var(--space-2);
+    border-radius: var(--radius-full);
+    background: var(--color-surface-hover);
+    color: var(--color-text-muted);
+    border: 1px solid var(--color-border);
+    white-space: nowrap;
+
+    &--active {
+      background: var(--color-accepted-bg);
+      color: var(--color-accepted-text);
+      border-color: transparent;
+    }
+  }
+
+  .tier-action-btn {
+    font-size: var(--font-size-xs);
+    font-family: var(--font-sans);
+    font-weight: 500;
+    padding: var(--space-1) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: none;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+
+    &:hover {
+      color: var(--color-text);
+      border-color: var(--color-text-subtle);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    &--danger {
+      color: var(--color-rejected-text);
+      border-color: currentColor;
+
+      &:hover {
+        background: var(--color-rejected-bg);
+      }
+    }
+  }
+
+  /* ── Add tier form ──────────────────────────────── */
+
+  .add-tier {
+    border-top: 1px solid var(--color-border);
+    padding-top: var(--space-4);
+    margin-top: var(--space-2);
+  }
+
+  .add-tier__title {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-3);
+  }
+
+  .add-tier-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  @media (max-width: 480px) {
+    .add-tier-fields {
+      grid-template-columns: 1fr;
+    }
+
+    .field-group--full {
+      grid-column: 1;
+    }
+  }
+
+  .add-tier__footer {
+    display: flex;
+  }
+
+  .field-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .field-group--full {
+    grid-column: 1 / -1;
+  }
+
+  .field-label {
+    font-size: var(--font-size-xs);
+    font-weight: 600;
+    color: var(--color-text-muted);
+  }
+
+  .field-input {
+    width: 100%;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-family: var(--font-sans);
+    color: var(--color-text);
+    background: var(--color-bg);
+    transition: var(--transition);
+    box-sizing: border-box;
+
+    &:focus {
+      outline: none;
+      border-color: var(--color-primary);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &--error {
+      border-color: var(--color-rejected-text);
     }
   }
 </style>

@@ -66,11 +66,15 @@ created_at timestamptz
 ```sql
 id                  uuid PK
 shop_id             uuid UNIQUE → shops   -- 1:1; trigger-created for every new shop
-auto_accept         boolean NOT NULL DEFAULT false
-booking_window_days integer NOT NULL DEFAULT 30
-buffer_minutes      integer NOT NULL DEFAULT 0
-deposit_required    boolean NOT NULL DEFAULT false
-show_shop_page      boolean NOT NULL DEFAULT false
+auto_accept                boolean NOT NULL DEFAULT false
+booking_window_days        integer NOT NULL DEFAULT 30
+buffer_minutes             integer NOT NULL DEFAULT 0
+deposit_required              boolean NOT NULL DEFAULT false
+show_shop_page                boolean NOT NULL DEFAULT false
+loyalty_enabled               boolean NOT NULL DEFAULT false
+loyalty_points_per_booking    integer NOT NULL DEFAULT 10
+loyalty_points_per_pence      integer NOT NULL DEFAULT 0   -- alternative: 1 point per N pence spent
+notify_loyalty_tier_reached   boolean NOT NULL DEFAULT true
 created_at          timestamptz
 updated_at          timestamptz           -- auto-updated via handle_updated_at() trigger
 ```
@@ -237,6 +241,33 @@ is_visible   boolean DEFAULT true
 created_at   timestamptz
 ```
 
+### `loyalty_reward_tiers`
+```sql
+id                  uuid PK
+shop_id             uuid → shops
+name                text NOT NULL
+points_required     integer NOT NULL CHECK (points_required > 0)
+reward_description  text NOT NULL
+reward_value_pence  integer NULL          -- optional monetary equivalent (display only)
+is_active           boolean NOT NULL DEFAULT true
+display_order       integer NOT NULL DEFAULT 0
+created_at          timestamptz
+```
+
+> Index on `(shop_id, display_order)`. RLS: owners have full CRUD; customers can read active tiers for their shop. Deletion is guarded — a tier cannot be deleted if any `loyalty_points_log` row references it by name (`note = tier.name`); the action returns a 400 with an inline error instead.
+
+### `loyalty_points_log`
+```sql
+id          uuid PK
+customer_id uuid → customers
+booking_id  uuid → bookings NULL   -- null for manual adjustments and redemptions not tied to a booking
+shop_id     uuid → shops
+change      integer NOT NULL       -- positive = earned, negative = redeemed or adjusted
+reason      text NOT NULL          -- 'booking_completed' | 'redeemed' | 'manual_adjustment'
+note        text NULL              -- tier name when reason = 'redeemed'; free text for manual_adjustment
+created_at  timestamptz
+```
+
 ### `notification_log`
 ```sql
 id         uuid PK
@@ -332,6 +363,7 @@ src/routes/
 │   │   └── [id]/                  Booking detail, accept/reject, internal notes
 │   ├── calendar/                  Weekly calendar view
 │   ├── customers/                 Customer list + loyalty points + notes
+│   │   └── [id]/                  Customer detail + loyalty log + manual adjust + redeem points
 │   ├── services/                  CRUD services
 │   ├── barbers/                   CRUD barbers (multi only)
 │   ├── schedule/                  Availability rules + block slots
@@ -349,7 +381,7 @@ src/routes/
 | Function | Trigger | Purpose | Status |
 |---|---|---|---|
 | `on-booking-created` | DB webhook | Send `bookingConfirmation` via Resend; check auto-accept; alert owner if manual | ✅ Built |
-| `on-booking-updated` | DB webhook | Send accepted / rejected / cancelled / review-invite emails based on new status | ✅ Built |
+| `on-booking-updated` | DB webhook | Send accepted / rejected / cancelled / review-invite emails based on new status. On `booking_completed`, also awards loyalty points and checks whether the new balance crosses any active tier threshold — fires `loyaltyTierReached` email if so (deduplication via `notification_log`) | ✅ Built (loyalty tier check planned — step 8.9) |
 | `send-reminders` | Cron (daily 7am UTC) | Find accepted bookings within 24hrs, deduplicate via `notification_log`, send `bookingReminder`; respects `email_reminders` preference | ✅ Built |
 | `send-guest-booking-link` | HTTP (called by booking action) | Send magic link email to guest customers so they can manage their booking | ✅ Built |
 | `get-available-slots` | HTTP (called by frontend) | Compute open slots from rules, blocks & existing bookings; handles split shifts | ✅ Built |
@@ -380,6 +412,7 @@ All templates live in `supabase/functions/_templates/` as TypeScript files. Each
 | `bookingReminder.ts` | 24hr cron | Customer | ✅ Built |
 | `reviewInvite.ts` | Status → completed | Customer | ✅ Built |
 | `waitlistNotification.ts` | Slot opens (planned) | Waitlisted customer | ✅ Built (edge fn pending) |
+| `loyaltyTierReached.ts` | Customer balance crosses a tier threshold after `booking_completed` | Customer | ⬜ Planned (step 8.9) |
 
 Owner alert emails (new booking request, customer cancellation) are plain HTML strings inlined in the edge function — not separate template files, as they are internal operational messages not customer-facing.
 
@@ -404,6 +437,8 @@ All customer-facing templates accept: `shopName`, `customerName`, `serviceName`,
 | `services` | Read active | Read | Full CRUD |
 | `barbers` | Read active | Read own | Full CRUD |
 | `reviews` | Read all, write own | Read | Read + hide |
+| `loyalty_reward_tiers` | Read active | — | Full CRUD |
+| `loyalty_points_log` | Read own | — | Read shop's |
 | `discount_codes` | Validate only | — | Full CRUD |
 
 ---
@@ -540,8 +575,14 @@ The `plan_type` flag on the `shops` table keeps expansion clean and requires no 
 | Customer name storage | `first_name` + `last_name` columns (not a single `name` column) | Enables proper personalisation in emails and UI without string splitting |
 | Schedule time input UX | Debounced auto-save (700ms) via `fetch` — no submit button | Immediate submit on every keystroke caused excessive server hits and poor UX; debounce with per-row spinner/saved/error feedback is cleaner. Errors persist until corrected; success clears after 2s. |
 | `client_branding` extended | Added `color_on_primary` + `color_on_secondary` columns (text, not null, default `#ffffff`); added hex check constraints on all four colour columns; `create_shop_defaults()` trigger updated to seed all four. Migration: `20260512000000_client_branding_on_colours.sql`. | Needed to properly support accessible colour-on-colour contrast without guessing the text colour from the background. |
+| Loyalty tier–reached notification | When `on-booking-updated` awards points for a `booking_completed` event, it queries active tiers ordered by `points_required ASC` and checks whether the new balance crosses any threshold the old balance did not. If so — and `loyalty_tier_email_enabled = true` on `shop_preferences` — it fires `loyaltyTierReached` and inserts a `notification_log` row (`type = 'loyaltyTierReached'`, includes tier name). Deduplication: check for an existing row for the same customer + type within a 30-day window before sending. Respects customer `email_confirmations` preference. |
+| Admin notification channel settings panel | A **Notifications** section in `/admin/settings` (between Loyalty Points and Display Settings) holds the `loyalty_tier_email_enabled` toggle. The panel is also the future home of per-channel toggles for SMS and WhatsApp (Coming Soon stubs present from the start so the UI structure is established before those integrations are wired). |
 | Admin settings page — single route | Implemented as one `/admin/settings` page with three sections (Booking Preferences, Display Settings, Branding), not sub-routes as originally planned. Two form actions: `?/updatePreferences` and `?/updateBranding`. | Sub-routes would have been over-engineering for the current feature set; a single page with clearly labelled sections is simpler and still extensible. |
 | WCAG contrast utility | `$lib/utils/contrast.ts` provides `hexToLinearRgb`, `getLuminance`, `getContrastRatio`, `getContrastRating`. Thresholds: < 3:1 = Fail, 3–4.49:1 = AA Large, ≥ 4.5:1 = AA Pass. Used in the branding section live preview. A soft pre-submit warning fires (with bypass) when either colour pair fails 4.5:1. | Button label text is normal-sized so 4.5:1 is the relevant threshold. Warning is soft (not blocking) so the admin can override if their design intent is deliberate. |
+| Loyalty points scoped per shop | `loyalty_points_log` has a `shop_id` column; the customer detail page only shows log entries for the current admin's shop. A customer could in future earn points at multiple shops without cross-contamination. | Shops are independent businesses — one customer's balance at Shop A should not bleed into Shop B's loyalty programme. |
+| Loyalty redemption is admin-only | Redemption is triggered from the admin booking detail page or the admin customer detail page, not by the customer. Customers see their balance and log on the dashboard but cannot self-redeem. | Redemption is a face-to-face conversation (the customer claims a reward at the chair). Giving customers a self-service redemption button introduces fraud risk and UX complexity without clear benefit for a solo/small-shop context. |
+| Loyalty log colour scheme | `booking_completed` (earned) → green (`--color-accepted-text`). `manual_adjustment` positive → green. `manual_adjustment` negative → red (`--color-rejected-text`). `redeemed` → amber (#d97706). | Redeemed entries are intentionally positive events (the customer got a reward) — rendering them red alongside negative adjustments would be misleading. Amber distinguishes them from both earned (green) and penalised (red). |
+| Tier deletion guard | Before hard-deleting a `loyalty_reward_tiers` row, the `?/deleteTier` action counts `loyalty_points_log` rows where `note = tier.name`. If count > 0, the action returns `fail(400, { deleteError, deletedTierId })` and the tier list shows an inline error for that row only. | Deleting a tier that appears in historical log entries would make those entries uninterpretable. The guard preserves auditability without requiring a soft-delete pattern on tiers. |
 
 ---
 

@@ -15,8 +15,24 @@
   let notesSubmitting = $state(false)
   let notesSaved = $state(false)
 
+  let loyaltyPoints = $state(data.customerLoyaltyPoints)
+  let confirmingTierId = $state<string | null>(null)
+  let redeemSubmitting = $state(false)
+  let redeemResult = $state<{ tierName: string; newBalance: number } | null>(null)
+
+  let loyaltyPointsRefunded = $state(data.loyaltyPointsRefunded ?? false)
+  let loyaltyRefundSuccess = $state(false)
+
   $effect(() => {
     notesText = data.booking.internalNotes ?? ''
+  })
+
+  $effect(() => {
+    loyaltyPoints = data.customerLoyaltyPoints
+  })
+
+  $effect(() => {
+    loyaltyPointsRefunded = data.loyaltyPointsRefunded ?? false
   })
 
   function formatPrice(pence: number): string {
@@ -161,6 +177,96 @@
     </section>
   {/if}
 
+  <!-- ── Loyalty Redemption ─────────────────────────── -->
+  {#if data.loyaltyEnabled && data.rewardTiers.length > 0}
+    <section class="card redemption-panel">
+      <h2 class="card__title">Loyalty Redemption</h2>
+
+      <div class="redemption-balance">
+        <span class="redemption-balance__pts">{loyaltyPoints}</span>
+        <span class="redemption-balance__label">points available</span>
+      </div>
+
+      {#if redeemResult}
+        <p class="redemption-success">
+          Redeemed — {redeemResult.tierName}. New balance: {redeemResult.newBalance} points.
+        </p>
+      {/if}
+
+      {#if form?.redeemError}
+        <p class="redemption-error">{form.redeemError}</p>
+      {/if}
+
+      <ul class="redemption-tiers">
+        {#each data.rewardTiers as tier (tier.id)}
+          {@const canRedeem = loyaltyPoints >= tier.points_required}
+          <li class="redemption-tier-item">
+            <button
+              type="button"
+              class="redemption-tier-btn"
+              class:redemption-tier-btn--insufficient={!canRedeem}
+              disabled={!canRedeem || redeemSubmitting}
+              onclick={() => { confirmingTierId = confirmingTierId === tier.id ? null : tier.id }}
+            >
+              <span class="redemption-tier-btn__info">
+                <span class="redemption-tier-btn__name">{tier.name}</span>
+                <span class="redemption-tier-btn__pts">{tier.points_required} pts</span>
+                <span class="redemption-tier-btn__desc">{tier.reward_description}</span>
+              </span>
+              {#if !canRedeem}
+                <span class="redemption-tier-btn__insufficient">Insufficient points</span>
+              {/if}
+            </button>
+
+            {#if confirmingTierId === tier.id && canRedeem}
+              <div class="confirm-redeem">
+                <p class="confirm-redeem__text">
+                  Redeem {tier.points_required} pts for <strong>{tier.name}</strong>?
+                  Customer will have <strong>{loyaltyPoints - tier.points_required}</strong> pts after redemption.
+                </p>
+                <div class="confirm-redeem__actions">
+                  <form
+                    method="POST"
+                    action="?/redeemPoints"
+                    use:enhance={() => {
+                      redeemSubmitting = true
+                      return async ({ result, update }) => {
+                        redeemSubmitting = false
+                        confirmingTierId = null
+                        if (result.type === 'success') {
+                          const d = result.data as Record<string, unknown>
+                          if (d?.redeemSuccess) {
+                            loyaltyPoints = d.newBalance as number
+                            redeemResult = { tierName: d.tierName as string, newBalance: d.newBalance as number }
+                            setTimeout(() => { redeemResult = null }, 5000)
+                          }
+                        }
+                        await update()
+                      }
+                    }}
+                  >
+                    <input type="hidden" name="tierId" value={tier.id} />
+                    <input type="hidden" name="customerId" value={data.booking.customerId} />
+                    <Button type="submit" size="sm" edges="soft" disabled={redeemSubmitting} loading={redeemSubmitting}>
+                      {redeemSubmitting ? 'Processing…' : 'Confirm'}
+                    </Button>
+                  </form>
+                  <button
+                    type="button"
+                    class="confirm-redeem__cancel"
+                    onclick={() => { confirmingTierId = null }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </li>
+        {/each}
+      </ul>
+    </section>
+  {/if}
+
   <div class="detail-grid">
 
     <!-- ── Customer ───────────────────────────────────── -->
@@ -168,7 +274,11 @@
       <h2 class="card__title">Customer</h2>
       <dl class="detail-list">
         <dt>Name</dt>
-        <dd>{data.booking.customer.name}</dd>
+        <dd>
+          <a href="/admin/customers/{data.booking.customerId}" class="customer-link">
+            {data.booking.customer.name}
+          </a>
+        </dd>
         {#if data.booking.customer.email}
           <dt>Email</dt>
           <dd><a href="mailto:{data.booking.customer.email}">{data.booking.customer.email}</a></dd>
@@ -205,11 +315,68 @@
         <dd>{data.booking.service.durationMinutes} min</dd>
         <dt>Price</dt>
         <dd>{formatPrice(data.booking.service.pricePence)}</dd>
+        {#if data.discountCode}
+          <dt>Discount code</dt>
+          <dd>{data.discountCode.code} ({data.discountCode.discountType === 'percentage' ? `${data.discountCode.discountValue}% off` : `£${(data.discountCode.discountValue / 100).toFixed(2)} off`})</dd>
+          <dt>Discount</dt>
+          <dd class="detail-list__discount">−{formatPrice(data.discountCode.discountAmountPence)}</dd>
+          <dt>Final price</dt>
+          <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.discountCode.discountAmountPence)}</dd>
+        {/if}
         {#if data.booking.depositPaidPence > 0}
           <dt>Deposit paid</dt>
           <dd>{formatPrice(data.booking.depositPaidPence)}</dd>
         {/if}
+        {#if data.loyaltyTier}
+          <dt>Loyalty reward</dt>
+          <dd>{data.loyaltyTier.name} — {data.loyaltyTier.rewardDescription}</dd>
+          {#if data.loyaltyDiscountAmountPence > 0}
+            <dt>Discount</dt>
+            <dd class="detail-list__loyalty-discount">−{formatPrice(data.loyaltyDiscountAmountPence)}</dd>
+            <dt>Final price</dt>
+            <dd class="detail-list__final-price">{formatPrice(data.booking.service.pricePence - data.loyaltyDiscountAmountPence)}</dd>
+          {/if}
+          <dt>Points redeemed</dt>
+          <dd>{data.loyaltyPointsRedeemed} pts</dd>
+          {#if data.booking.status === 'cancelled'}
+            <dt>Points refunded</dt>
+            <dd class={loyaltyPointsRefunded ? 'detail-list__final-price' : 'detail-list__muted'}>
+              {loyaltyPointsRefunded ? 'Yes' : 'No'}
+            </dd>
+          {/if}
+        {/if}
       </dl>
+
+      {#if data.loyaltyTier && data.booking.status === 'cancelled' && (data.loyaltyPointsRedeemed ?? 0) > 0}
+        <div class="loyalty-refund">
+          {#if loyaltyRefundSuccess}
+            <p class="loyalty-refund__success">Points refunded successfully.</p>
+          {/if}
+          {#if !loyaltyPointsRefunded}
+            {#if form?.refundError}
+              <p class="loyalty-refund__error">{form.refundError}</p>
+            {/if}
+            <form
+              method="post"
+              action="?/refundLoyaltyPoints"
+              use:enhance={() => {
+                return async ({ result, update }) => {
+                  if (result.type === 'success') {
+                    loyaltyPointsRefunded = true
+                    loyaltyRefundSuccess = true
+                    setTimeout(() => { loyaltyRefundSuccess = false }, 5000)
+                  }
+                  await update()
+                }
+              }}
+            >
+              <button type="submit" class="loyalty-refund__btn">
+                Refund {data.loyaltyPointsRedeemed} points to customer
+              </button>
+            </form>
+          {/if}
+        </div>
+      {/if}
     </section>
 
     <!-- ── Meta ───────────────────────────────────────── -->
@@ -536,6 +703,14 @@
       &:hover {
         text-decoration: none;
       }
+    }
+  }
+
+  .customer-link {
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
     }
   }
 
@@ -873,6 +1048,157 @@
     color: var(--color-accepted-text);
   }
 
+  /* ── Loyalty Redemption panel ────────────────────── */
+
+  .redemption-panel {
+    gap: var(--space-4);
+  }
+
+  .redemption-balance {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+  }
+
+  .redemption-balance__pts {
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .redemption-balance__label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+  }
+
+  .redemption-success {
+    font-size: var(--font-size-sm);
+    color: var(--color-accepted-text);
+    background: var(--color-accepted-bg);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .redemption-error {
+    font-size: var(--font-size-sm);
+    color: var(--color-rejected-text);
+    background: var(--color-rejected-bg);
+    border-radius: var(--radius-md);
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .redemption-tiers {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .redemption-tier-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .redemption-tier-btn {
+    width: 100%;
+    text-align: left;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: none;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    font-family: var(--font-sans);
+
+    &:hover:not(:disabled) {
+      border-color: var(--color-primary);
+      background: var(--color-surface-hover);
+    }
+
+    &:disabled {
+      cursor: not-allowed;
+    }
+
+    &--insufficient {
+      opacity: 0.55;
+    }
+  }
+
+  .redemption-tier-btn__info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1;
+    flex-wrap: wrap;
+  }
+
+  .redemption-tier-btn__name {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    color: var(--color-text);
+  }
+
+  .redemption-tier-btn__pts {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .redemption-tier-btn__desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+  }
+
+  .redemption-tier-btn__insufficient {
+    font-size: var(--font-size-xs);
+    color: var(--color-rejected-text);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .confirm-redeem {
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface-hover);
+    border: 1px solid var(--color-primary);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .confirm-redeem__text {
+    font-size: var(--font-size-sm);
+    color: var(--color-text);
+    line-height: 1.5;
+  }
+
+  .confirm-redeem__actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .confirm-redeem__cancel {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-muted);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline;
+    font-family: var(--font-sans);
+
+    &:hover {
+      color: var(--color-text);
+    }
+  }
+
   /* ── ─────────────────────────────────────────────── */
 
   .detail-list__id {
@@ -881,6 +1207,64 @@
     color: var(--color-text-muted);
     font-family: monospace;
     word-break: break-all;
+  }
+
+  .detail-list__discount {
+    color: var(--color-rejected-text);
+  }
+
+  .detail-list__final-price {
+    color: var(--color-accepted-text);
+    font-weight: 600;
+  }
+
+  .detail-list__loyalty-discount {
+    color: #d97706;
+    font-weight: 500;
+  }
+
+  .detail-list__muted {
+    color: var(--color-text-muted);
+  }
+
+  /* ── Loyalty refund ──────────────────────────────── */
+
+  .loyalty-refund {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
+    border-top: 1px solid var(--color-border);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .loyalty-refund__btn {
+    display: inline-flex;
+    align-items: center;
+    font-size: var(--font-size-xs);
+    font-weight: 500;
+    color: #92400e;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid #fcd34d;
+    border-radius: var(--radius-sm);
+    background: #fef3c7;
+    cursor: pointer;
+    transition: var(--transition);
+
+    &:hover {
+      background: #fde68a;
+      border-color: #d97706;
+    }
+  }
+
+  .loyalty-refund__success {
+    font-size: var(--font-size-sm);
+    color: var(--color-accepted-text);
+  }
+
+  .loyalty-refund__error {
+    font-size: var(--font-size-sm);
+    color: var(--color-rejected-text);
   }
 
 </style>
