@@ -131,7 +131,7 @@
     flex-direction: column;
     align-items: flex-start;
     width: 100%;
-    padding: var(--space-4) var(--space-5);
+    padding: var(--space-4) var(--space-4);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
