@@ -62,9 +62,9 @@
     transition: background 0.15s, color 0.15s, border 0.15s;
   }
   .btn--primary:hover:not(:disabled) {
-    background-color: var(--color-primary-hover, #0053a0);
-    border-color: var(--color-primary-hover, #0053a0);
-    color: var(--color-on-primary, #fff);
+    background-color: var(--btn-primary-hover-bg, var(--color-primary-hover, var(--color-primary)));
+    border-color: var(--btn-primary-hover-border, var(--color-primary-hover, var(--color-primary)));
+    color: var(--btn-primary-hover-color, var(--color-on-primary));
   }
   .btn--secondary {
     background-color: var(--color-secondary);
@@ -73,9 +73,9 @@
     transition: background 0.15s, color 0.15s, border 0.15s;
   }
   .btn--secondary:hover:not(:disabled) {
-    background-color: var(--color-secondary-hover, #e0e0e0);
-    border-color: var(--color-secondary-hover, #e0e0e0);
-    color: var(--color-on-secondary, #222);
+    background-color: var(--btn-secondary-hover-bg, var(--color-secondary-hover, var(--color-secondary)));
+    border-color: var(--btn-secondary-hover-border, var(--color-secondary-hover, var(--color-secondary)));
+    color: var(--btn-secondary-hover-color, var(--color-on-secondary));
   }
   .btn--accept {
     background-color: var(--color-success);

@@ -15,8 +15,10 @@
     // cascade to everything on the page, overriding the clientBranding.css defaults.
     if (data.branding) {
       const root = document.documentElement
-      root.style.setProperty('--color-primary',   data.branding.color_primary)
-      root.style.setProperty('--color-secondary',  data.branding.color_secondary)
+      root.style.setProperty('--color-primary',      data.branding.color_primary)
+      root.style.setProperty('--color-on-primary',   data.branding.color_on_primary)
+      root.style.setProperty('--color-secondary',    data.branding.color_secondary)
+      root.style.setProperty('--color-on-secondary', data.branding.color_on_secondary)
       if (data.branding.font_heading) root.style.setProperty('--font-heading', data.branding.font_heading)
       if (data.branding.font_body)    root.style.setProperty('--font-body',    data.branding.font_body)
     }

@@ -201,7 +201,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
 
   const admin = createSupabaseAdminClient()
 
-  const [servicesResult, barberResult, prefsResult, tiersResult, customerResult] = await Promise.all([
+  const [servicesResult, barberResult, prefsResult, tiersResult, customerResult, brandingResult] = await Promise.all([
     locals.supabase
       .from('services')
       .select('id, name, description, duration_minutes, price_pence')
@@ -235,6 +235,11 @@ export const load: PageServerLoad = async ({ params, locals }) => {
           .eq('user_id', user.id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
+    admin
+      .from('client_branding')
+      .select('color_primary, color_on_primary, color_secondary, color_on_secondary, logo_url')
+      .eq('shop_id', shopRaw.id)
+      .maybeSingle(),
   ])
 
   if (servicesResult.error) throw servicesResult.error
@@ -257,6 +262,7 @@ export const load: PageServerLoad = async ({ params, locals }) => {
     loyaltyEnabled,
     rewardTiers: (tiersResult.data ?? []) as RewardTier[],
     customerLoyaltyPoints: customerResult.data?.loyalty_points ?? null,
+    branding: brandingResult.data ?? null,
   }
 }
 

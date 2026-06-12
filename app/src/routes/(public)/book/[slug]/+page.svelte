@@ -322,8 +322,16 @@
   <title>Book an appointment — {shop.name}</title>
 </svelte:head>
 
-<div class="booking-page">
-  <header class="booking-page__header" style="--shop-brand: {data.branding?.color_primary ?? 'var(--color-primary)'}">
+<div
+  class="booking-page"
+  style={data.branding ? [
+    `--color-primary: ${data.branding.color_primary}`,
+    `--color-on-primary: ${data.branding.color_on_primary}`,
+    `--color-secondary: ${data.branding.color_secondary}`,
+    `--color-on-secondary: ${data.branding.color_on_secondary}`,
+  ].join('; ') : ''}
+>
+  <header class="booking-page__header">
     <div class="booking-page__header-inner container">
       {#if data.branding?.logo_url}
         <img src={data.branding?.logo_url} alt="{shop.name} logo" class="booking-page__logo" />
@@ -437,10 +445,16 @@
   .booking-page {
     min-height: 100vh;
     background: var(--color-bg);
+    --btn-primary-hover-bg: var(--color-on-primary);
+    --btn-primary-hover-border: var(--color-primary);
+    --btn-primary-hover-color: var(--color-primary);
+    --btn-secondary-hover-bg: var(--color-on-secondary);
+    --btn-secondary-hover-border: var(--color-secondary);
+    --btn-secondary-hover-color: var(--color-secondary);
   }
 
   .booking-page__header {
-    background: var(--shop-brand);
+    background: var(--color-primary);
     padding: var(--space-6) 0;
   }
 
@@ -458,7 +472,7 @@
   .booking-page__shop-name {
     font-size: var(--font-size-xl);
     font-weight: 700;
-    color: var(--color-white);
+    color: var(--color-on-primary);
   }
 
   .booking-page__card {
