@@ -4,7 +4,7 @@ export const load: LayoutServerLoad = async ({ locals, url }) => {
   const { session, user } = await locals.safeGetSession()
   const supabase = locals.supabase
 
-  const brandingSelect = 'color_primary, color_secondary, font_heading, font_body, logo_url'
+  const brandingSelect = 'color_primary, color_on_primary, color_secondary, color_on_secondary, font_heading, font_body, logo_url'
 
   // Resolve branding by shop slug first (public booking pages /book/[slug]),
   // then fall back to the logged-in user's own shop.
